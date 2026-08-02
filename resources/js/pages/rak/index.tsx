@@ -162,7 +162,7 @@ export default function RakIndex({ racks, canManage }: PageProps) {
                             />
                         </div>
 
-                        <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                        <div className="grid items-start gap-4 grid-cols-[repeat(auto-fill,minmax(min(100%,17rem),1fr))]">
                             {filtered.map((rak) => (
                                 <RakCard
                                     key={rak.id}

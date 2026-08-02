@@ -65,15 +65,20 @@ export function AppSidebar() {
         },
     ];
 
-    // Dashboard, reports & audit log are management-only.
+    // Management gets the dashboard at the top of the operational group;
+    // petugas go straight to their day-to-day items.
     const mainNavItems: NavItem[] = isManagement
         ? [
               { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
               ...operationalNavItems,
-              { title: 'Laporan', href: '/laporan', icon: ScrollText },
-              { title: 'Aktivitas', href: '/aktivitas', icon: History },
           ]
         : operationalNavItems;
+
+    // Reports & audit log are management-only, grouped on their own.
+    const reportNavItems: NavItem[] = [
+        { title: 'Laporan', href: '/laporan', icon: ScrollText },
+        { title: 'Aktivitas', href: '/aktivitas', icon: History },
+    ];
 
     return (
         <Sidebar collapsible="icon" variant="inset">
@@ -105,6 +110,9 @@ export function AppSidebar() {
                 </SidebarGroup>
 
                 <NavMain items={mainNavItems} label="Operasional" />
+                {isManagement && (
+                    <NavMain items={reportNavItems} label="Laporan" />
+                )}
                 {isManagement && (
                     <NavMain items={ownerNavItems} label="Pemilik" />
                 )}

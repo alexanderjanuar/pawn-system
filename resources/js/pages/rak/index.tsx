@@ -124,7 +124,7 @@ export default function RakIndex({ racks, canManage }: PageProps) {
                 </PageHeader>
 
                 {racks.length > 0 && (
-                    <div className="grid grid-cols-3 w-fit overflow-hidden rounded-xl border bg-card shadow-sm">
+                    <div className="grid w-full grid-cols-3 overflow-hidden rounded-xl border bg-card shadow-sm sm:w-fit">
                         <Kpi label="Jumlah Rak" value={String(totals.racks)} />
                         <Kpi
                             label="HP Tersimpan"
@@ -152,7 +152,7 @@ export default function RakIndex({ racks, canManage }: PageProps) {
                     </div>
                 ) : (
                     <>
-                        <div className="relative max-w-xs">
+                        <div className="relative w-full sm:max-w-xs">
                             <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
                             <Input
                                 value={query}

@@ -91,12 +91,6 @@ export default function Login({ status, canResetPassword }: Props) {
                 )}
             </Form>
 
-            <div className="rounded-lg border border-dashed bg-muted/40 p-3 text-center text-xs text-muted-foreground">
-                Akun demo ·{' '}
-                <span className="tabular-nums">owner@gulamcell.test</span> ·
-                kata sandi <span className="font-medium">password</span>
-            </div>
-
             {status && (
                 <div className="mb-4 text-center text-sm font-medium text-green-600">
                     {status}

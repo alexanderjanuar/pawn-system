@@ -124,7 +124,7 @@ export default function RakIndex({ racks, canManage }: PageProps) {
                 </PageHeader>
 
                 {racks.length > 0 && (
-                    <div className="grid grid-cols-3 overflow-hidden rounded-xl border bg-card shadow-sm">
+                    <div className="grid grid-cols-3 w-fit overflow-hidden rounded-xl border bg-card shadow-sm">
                         <Kpi label="Jumlah Rak" value={String(totals.racks)} />
                         <Kpi
                             label="HP Tersimpan"
@@ -162,7 +162,7 @@ export default function RakIndex({ racks, canManage }: PageProps) {
                             />
                         </div>
 
-                        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                        <div className="grid items-start gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
                             {filtered.map((rak) => (
                                 <RakCard
                                     key={rak.id}
@@ -231,8 +231,8 @@ function RakCard({
         rak.capacity && rak.capacity > 0
             ? Math.min(1, rak.count / rak.capacity)
             : rak.count > 0
-              ? 1
-              : 0;
+                ? 1
+                : 0;
 
     return (
         <div

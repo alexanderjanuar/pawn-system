@@ -26,7 +26,12 @@ type Filter = GadaiStatus | 'ALL';
 type SortKey = 'kode' | 'customer' | 'device' | 'principal' | 'due' | 'status';
 
 const SORT_FNS: Record<SortKey, (a: Transaction, b: Transaction) => number> = {
-    kode: (a, b) => a.id.localeCompare(b.id),
+    // Sort by when the transaction was made (tanggal masuk), then by exact
+    // creation time. Robust across stores whose nota codes use different
+    // prefixes, where a plain code sort would not be chronological.
+    kode: (a, b) =>
+        a.startDate.localeCompare(b.startDate) ||
+        (a.createdAt ?? '').localeCompare(b.createdAt ?? ''),
     customer: (a, b) => a.customer.name.localeCompare(b.customer.name),
     device: (a, b) => a.device.name.localeCompare(b.device.name),
     principal: (a, b) => a.principal - b.principal,

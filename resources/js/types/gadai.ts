@@ -123,8 +123,9 @@ export type Transaction = {
     fee: number; // biaya titipan
     saleValue?: number | null; // nilai jual lelang
     soldAt?: string | null; // tanggal terjual lelang
-    startDate: string; // ISO
+    startDate: string; // ISO tanggal masuk
     dueDate: string; // ISO
+    createdAt?: string; // ISO timestamp pembuatan transaksi
     clerk: string; // petugas yang menangani
     rakId?: number | null; // rak fisik tempat HP disimpan
     rak?: string | null; // nama rak

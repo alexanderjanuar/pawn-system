@@ -1,10 +1,15 @@
 /**
  * Formatting + date helpers for the pawn system.
- * A fixed TODAY keeps the mock/design preview deterministic; the backend
- * build will use the real server date.
+ * TODAY is the real current date (at local midnight) so relative labels like
+ * "15 hari lagi" and overdue counts reflect the actual day.
  */
 
-export const TODAY = new Date('2026-07-19T00:00:00');
+export const TODAY = (() => {
+    const now = new Date();
+    now.setHours(0, 0, 0, 0);
+
+    return now;
+})();
 
 const rupiah = new Intl.NumberFormat('id-ID', {
     style: 'currency',

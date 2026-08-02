@@ -6,7 +6,6 @@ use App\Models\Setting;
 use App\Models\Store;
 use App\Models\Transaction;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Inertia\Middleware;
 
 class HandleInertiaRequests extends Middleware
@@ -50,12 +49,37 @@ class HandleInertiaRequests extends Middleware
                 'error' => $request->session()->get('error'),
             ],
             'overdueCount' => $request->user()
-                ? $this->overdueCount()
+                ? $this->overdueCount($this->resolveActiveStoreId($request))
                 : 0,
             'approvalThreshold' => (int) Setting::get('approval_threshold', Transaction::APPROVAL_THRESHOLD),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             ...$this->storeProps($request),
         ];
+    }
+
+    /**
+     * The store the request is scoped to. Resolved directly from the
+     * session/user because shared props are evaluated before route middleware
+     * runs (so the SetActiveStore singleton is not populated yet). Null = all
+     * stores (management overview) or single-shop with no stores yet.
+     */
+    protected function resolveActiveStoreId(Request $request): ?int
+    {
+        $user = $request->user();
+
+        if (! $user) {
+            return null;
+        }
+
+        if (! $user->isManagement()) {
+            return $user->store_id;
+        }
+
+        $sessionId = $request->session()->get('active_store_id');
+
+        return $sessionId !== null && Store::query()->whereKey($sessionId)->exists()
+            ? (int) $sessionId
+            : null;
     }
 
     /**
@@ -72,25 +96,16 @@ class HandleInertiaRequests extends Middleware
             return ['stores' => [], 'activeStore' => 'all', 'activeStoreName' => null];
         }
 
-        // Resolve the active store directly from the session/user here: shared
-        // props are evaluated before route middleware runs, so the
-        // SetActiveStore singleton is not populated yet at this point.
-        if ($user->isManagement()) {
-            $sessionId = $request->session()->get('active_store_id');
-            $activeId = $sessionId !== null && Store::query()->whereKey($sessionId)->exists()
-                ? (int) $sessionId
-                : null;
+        $activeId = $this->resolveActiveStoreId($request);
 
-            $stores = Store::query()->active()->orderBy('name')->get(['id', 'name', 'code'])
+        $stores = $user->isManagement()
+            ? Store::query()->active()->orderBy('name')->get(['id', 'name', 'code'])
                 ->map(fn (Store $store): array => [
                     'id' => $store->id,
                     'name' => $store->name,
                     'code' => $store->code,
-                ])->all();
-        } else {
-            $activeId = $user->store_id;
-            $stores = [];
-        }
+                ])->all()
+            : [];
 
         return [
             'stores' => $stores,
@@ -102,15 +117,15 @@ class HandleInertiaRequests extends Middleware
     }
 
     /**
-     * Items needing action (due today or overdue) for the sidebar badge.
-     * Uses the design dataset's reference date (2026-07-19).
+     * Items needing action (due today or overdue) for the sidebar badge,
+     * scoped to the active store.
      */
-    protected function overdueCount(): int
+    protected function overdueCount(?int $storeId): int
     {
         return Transaction::query()
+            ->when($storeId !== null, fn ($query) => $query->where('store_id', $storeId))
             ->whereIn('status', ['AKTIF', 'PERPANJANG', 'TIDAK_DIAMBIL'])
-            ->whereDate('due_date', '<=', Carbon::parse('2026-07-19'))
+            ->whereDate('due_date', '<=', now())
             ->count();
     }
 }
-

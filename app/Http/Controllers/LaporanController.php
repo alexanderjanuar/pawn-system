@@ -4,8 +4,8 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\TransactionResource;
 use App\Models\Transaction;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
-use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -90,7 +90,7 @@ class LaporanController extends Controller
     }
 
     /**
-     * @return \Illuminate\Database\Eloquent\Collection<int, Transaction>
+     * @return Collection<int, Transaction>
      */
     private function transactions(string $from, string $to)
     {
@@ -193,8 +193,8 @@ class LaporanController extends Controller
      */
     private function overview(): array
     {
-        // Demo reference date: matches the sidebar overdue badge & frontend TODAY.
-        $ref = Carbon::parse('2026-07-19');
+        // Matches the sidebar overdue badge & frontend TODAY.
+        $ref = now();
 
         return [
             'uangBeredar' => (int) Transaction::query()

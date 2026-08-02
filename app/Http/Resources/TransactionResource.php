@@ -52,6 +52,7 @@ class TransactionResource extends JsonResource
             'soldAt' => $this->sold_at?->format('Y-m-d'),
             'startDate' => $this->start_date->format('Y-m-d'),
             'dueDate' => $this->due_date->format('Y-m-d'),
+            'createdAt' => $this->created_at?->toIso8601String(),
             'clerk' => $this->clerk,
             'rakId' => $this->rak_id,
             'rak' => $this->whenLoaded('rak', fn () => $this->rak?->name),

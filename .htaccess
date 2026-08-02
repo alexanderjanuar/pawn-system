@@ -1,9 +1,15 @@
 <IfModule mod_rewrite.c>
     RewriteEngine On
+    Options +FollowSymLinks
 
-    # Blokir akses ke file & folder sensitif
+    # Blokir file sensitif di root
     RewriteRule ^(\.env|\.env\..*|\.git|composer\.(json|lock)|package(-lock)?\.json|artisan|phpunit\.xml|pint\.json|phpstan\.neon|eslint\.config\.js|vite\.config\.ts|tsconfig\.json|boost\.json|components\.json|pnpm-workspace\.yaml|.*\.md)$ - [F,L]
-    RewriteRule ^(app|bootstrap|config|database|resources|routes|storage|tests|vendor|node_modules)/ - [F,L]
+
+    # Blokir folder internal (storage TIDAK diblokir, dipakai symlink public/storage)
+    RewriteRule ^(app|bootstrap|config|database|resources|routes|tests|vendor|node_modules)/ - [F,L]
+
+    # Blokir isi storage yang sensitif saja
+    RewriteRule ^storage/(logs|framework)/ - [F,L]
 
     # Arahkan semua request ke folder public
     RewriteCond %{REQUEST_URI} !^/public/
@@ -11,8 +17,3 @@
 </IfModule>
 
 Options -Indexes
-
-<IfModule mod_headers.c>
-    Header set X-Content-Type-Options "nosniff"
-    Header set X-Frame-Options "SAMEORIGIN"
-</IfModule>

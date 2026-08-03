@@ -9,6 +9,7 @@ use App\Http\Controllers\LaporanController;
 use App\Http\Controllers\PelangganController;
 use App\Http\Controllers\PengaturanController;
 use App\Http\Controllers\PenggunaController;
+use App\Http\Controllers\PiutangController;
 use App\Http\Controllers\RakController;
 use App\Http\Controllers\TokoController;
 use App\Http\Controllers\TransaksiController;
@@ -49,6 +50,9 @@ Route::middleware(['auth', 'active-store'])->group(function () {
         Route::post('transaksi/{transaction}/reject', [GadaiController::class, 'reject'])->name('transaksi.reject');
     });
 
+    // Tebus (redeem & take)
+    Route::post('transaksi/{transaction}/tebus', [GadaiController::class, 'redeem'])->name('transaksi.redeem');
+
     // Lelang
     Route::post('transaksi/{transaction}/lelang', [GadaiController::class, 'lelang'])->name('transaksi.lelang');
     Route::post('transaksi/{transaction}/sale', [GadaiController::class, 'recordSale'])->name('transaksi.sale');
@@ -73,6 +77,18 @@ Route::middleware(['auth', 'active-store'])->group(function () {
         Route::post('rak', [RakController::class, 'store'])->name('rak.store');
         Route::put('rak/{rak}', [RakController::class, 'update'])->name('rak.update');
         Route::delete('rak/{rak}', [RakController::class, 'destroy'])->name('rak.destroy');
+    });
+
+    // Piutang HP (jual/ambil HP secara kredit) — operasional; hapus khusus owner/admin
+    Route::get('piutang', [PiutangController::class, 'index'])->name('piutang.index');
+    Route::post('piutang', [PiutangController::class, 'store'])->name('piutang.store');
+    Route::get('piutang/{piutang}', [PiutangController::class, 'show'])->name('piutang.show');
+    Route::put('piutang/{piutang}', [PiutangController::class, 'update'])->name('piutang.update');
+    Route::put('piutang/{piutang}/termin', [PiutangController::class, 'setTermin'])->name('piutang.termin');
+    Route::post('piutang/{piutang}/bayar', [PiutangController::class, 'storePayment'])->name('piutang.bayar');
+    Route::middleware('role:owner,admin')->group(function () {
+        Route::delete('piutang/{piutang}', [PiutangController::class, 'destroy'])->name('piutang.destroy');
+        Route::delete('piutang/{piutang}/bayar/{payment}', [PiutangController::class, 'destroyPayment'])->name('piutang.bayar.destroy');
     });
 
     // Laporan & audit (hanya owner & admin — petugas tidak melihat data laporan/keuangan/aktivitas)

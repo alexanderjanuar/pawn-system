@@ -95,7 +95,8 @@ export type Activity = {
         | 'petugas'
         | 'user'
         | 'store'
-        | 'rak';
+        | 'rak'
+        | 'piutang';
     subjectCode: string | null;
     subjectLabel: string | null;
     description: string;

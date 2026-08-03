@@ -752,15 +752,16 @@ function TebusDialog({ tx }: { tx: Transaction }) {
                         <Button variant="outline">Batal</Button>
                     </DialogClose>
                     <Button
-                        onClick={() => {
-                            setOpen(false);
-                            toast.success(
-                                'Barang ditebus & diambil (preview)',
+                        onClick={() =>
+                            router.post(
+                                `/transaksi/${tx.id}/tebus`,
+                                {},
                                 {
-                                    description: `${tx.id} ditandai Diambil.`,
+                                    preserveScroll: true,
+                                    onSuccess: () => setOpen(false),
                                 },
-                            );
-                        }}
+                            )
+                        }
                     >
                         <Wallet />
                         Konfirmasi Tebus

@@ -339,6 +339,33 @@ class GadaiController extends Controller
             ->with('success', "Transaksi {$code} dihapus.");
     }
 
+    public function redeem(Request $request, Transaction $transaction): RedirectResponse
+    {
+        if (! in_array($transaction->status, ['AKTIF', 'PERPANJANG', 'TIDAK_DIAMBIL'], true)) {
+            return back()->with('error', 'Transaksi ini tidak bisa ditebus.');
+        }
+
+        $transaction->update(['status' => 'DIAMBIL']);
+
+        $transaction->events()->create([
+            'type' => 'redeemed',
+            'event_date' => now(),
+            'title' => 'Ditebus & diambil',
+            'by' => $request->user()?->name,
+            'amount' => $transaction->principal + $transaction->fee,
+        ]);
+
+        ActivityLog::record(
+            'updated',
+            'transaction',
+            $transaction->code,
+            $transaction->customer->name,
+            'Menebus & mengambil barang',
+        );
+
+        return back()->with('success', "Transaksi {$transaction->code} ditebus & diambil.");
+    }
+
     public function lelang(Request $request, Transaction $transaction): RedirectResponse
     {
         if (in_array($transaction->status, ['DIAMBIL', 'LELANG'], true)) {

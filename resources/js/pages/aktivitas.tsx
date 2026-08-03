@@ -20,6 +20,7 @@ const SUBJECT_NOUN: Record<Activity['subjectType'], string> = {
     user: 'Akun',
     store: 'Toko',
     rak: 'Rak',
+    piutang: 'Piutang',
 };
 
 function subjectHref(a: Activity): string | null {

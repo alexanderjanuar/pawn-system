@@ -290,6 +290,44 @@ test('the petugas is taken from the form, not the logged-in account', function (
     expect(Transaction::first()->clerk)->toBe('Rina');
 });
 
+test('a running transaction can be redeemed and taken', function () {
+    $user = User::factory()->create();
+    $customer = Customer::create([
+        'code' => 'PLG-001', 'name' => 'A', 'phone' => '081', 'join_date' => '2026-07-01',
+    ]);
+    $tx = Transaction::create([
+        'code' => 'GCG-20260720-0001', 'customer_id' => $customer->id,
+        'device_owner' => 'A', 'device_name' => 'HP', 'kelengkapan' => 'HP saja',
+        'principal' => 1_000_000, 'tenor_days' => 15, 'fee_percent' => 10, 'fee' => 100_000,
+        'start_date' => '2026-07-20', 'due_date' => '2026-08-04', 'status' => 'AKTIF',
+        'approval_status' => 'approved', 'clerk' => 'Rina',
+    ]);
+
+    $this->actingAs($user)->post("/transaksi/{$tx->code}/tebus")->assertRedirect();
+
+    $tx->refresh();
+    expect($tx->status)->toBe('DIAMBIL')
+        ->and($tx->events()->where('type', 'redeemed')->count())->toBe(1);
+});
+
+test('a redeemed transaction cannot be redeemed again', function () {
+    $user = User::factory()->create();
+    $customer = Customer::create([
+        'code' => 'PLG-001', 'name' => 'A', 'phone' => '081', 'join_date' => '2026-07-01',
+    ]);
+    $tx = Transaction::create([
+        'code' => 'GCG-20260720-0001', 'customer_id' => $customer->id,
+        'device_owner' => 'A', 'device_name' => 'HP', 'kelengkapan' => 'HP saja',
+        'principal' => 1_000_000, 'tenor_days' => 15, 'fee_percent' => 10, 'fee' => 100_000,
+        'start_date' => '2026-07-20', 'due_date' => '2026-08-04', 'status' => 'DIAMBIL',
+        'approval_status' => 'approved', 'clerk' => 'Rina',
+    ]);
+
+    $this->actingAs($user)->post("/transaksi/{$tx->code}/tebus")->assertRedirect();
+
+    expect($tx->events()->where('type', 'redeemed')->count())->toBe(0);
+});
+
 test('a gadai requires a device name and principal', function () {
     $user = User::factory()->create();
 

@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 class UpdateGadaiRequest extends FormRequest
 {
@@ -41,7 +42,17 @@ class UpdateGadaiRequest extends FormRequest
             'principal' => ['required', 'integer', 'min:1'],
             'tenor_choice' => ['required', 'in:15,30,custom'],
             'custom_days' => ['required_if:tenor_choice,custom', 'nullable', 'integer', 'min:1'],
-            'custom_percent' => ['required_if:tenor_choice,custom', 'nullable', 'integer', 'min:0'],
+            'fee_mode' => ['nullable', 'in:percent,nominal'],
+            'custom_percent' => [
+                'nullable', 'integer', 'min:0',
+                Rule::requiredIf(fn (): bool => $this->input('tenor_choice') === 'custom'
+                    && $this->input('fee_mode', 'percent') === 'percent'),
+            ],
+            'custom_fee' => [
+                'nullable', 'integer', 'min:0',
+                Rule::requiredIf(fn (): bool => $this->input('tenor_choice') === 'custom'
+                    && $this->input('fee_mode') === 'nominal'),
+            ],
             'start_date' => ['required', 'date'],
             'notes' => ['nullable', 'string', 'max:1000'],
 

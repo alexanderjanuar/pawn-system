@@ -14,6 +14,7 @@ use App\Models\Setting;
 use App\Models\Store;
 use App\Models\Transaction;
 use App\Support\ActiveStore;
+use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -463,9 +464,9 @@ class GadaiController extends Controller
      * Customers with their transactions eager-loaded (newest first), so the
      * form can show an existing customer's pawn history inline.
      *
-     * @return \Illuminate\Database\Eloquent\Collection<int, Customer>
+     * @return Collection<int, Customer>
      */
-    private function customersWithHistory(): \Illuminate\Database\Eloquent\Collection
+    private function customersWithHistory(): Collection
     {
         return Customer::query()
             ->with(['transactions' => fn ($query) => $query->orderByDesc('start_date')])
@@ -498,17 +499,33 @@ class GadaiController extends Controller
      */
     private function terms(array $data): array
     {
+        $principal = (int) $data['principal'];
+
         $days = match ($data['tenor_choice']) {
             '15' => 15,
             '30' => 30,
             default => (int) $data['custom_days'],
         };
+
+        // Custom fee can be entered as a nominal rupiah amount; the percent is
+        // then derived from it. The fixed tenors stay percent-based.
+        if ($data['tenor_choice'] === 'custom' && ($data['fee_mode'] ?? 'percent') === 'nominal') {
+            $fee = (int) ($data['custom_fee'] ?? 0);
+            $percent = $principal > 0 ? (int) round($fee / $principal * 100) : 0;
+
+            return [
+                'principal' => $principal,
+                'days' => $days,
+                'percent' => $percent,
+                'fee' => $fee,
+            ];
+        }
+
         $percent = match ($data['tenor_choice']) {
             '15' => 10,
             '30' => 15,
             default => (int) $data['custom_percent'],
         };
-        $principal = (int) $data['principal'];
 
         return [
             'principal' => $principal,

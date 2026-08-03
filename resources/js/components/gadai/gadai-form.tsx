@@ -149,6 +149,8 @@ export function GadaiForm({
             : '15') as TenorChoice,
         custom_days: transaction?.tenorDays ?? 15,
         custom_percent: transaction?.feePercent ?? 10,
+        fee_mode: 'nominal' as 'percent' | 'nominal',
+        custom_fee: transaction?.fee ?? 0,
         start_date:
             transaction?.startDate ?? today ?? TODAY.toISOString().slice(0, 10),
         notes: transaction?.notes ?? '',
@@ -197,13 +199,27 @@ export function GadaiForm({
                 : data.tenor_choice === '30'
                   ? 30
                   : Math.max(1, data.custom_days || 0);
-        const percent =
-            data.tenor_choice === '15'
-                ? 10
-                : data.tenor_choice === '30'
-                  ? 15
-                  : Math.max(0, data.custom_percent || 0);
-        const fee = computeFee(data.principal, percent);
+
+        let percent: number;
+        let fee: number;
+
+        if (data.tenor_choice === '15') {
+            percent = 10;
+            fee = computeFee(data.principal, percent);
+        } else if (data.tenor_choice === '30') {
+            percent = 15;
+            fee = computeFee(data.principal, percent);
+        } else if (data.fee_mode === 'nominal') {
+            // Custom nominal: the rupiah fee is the source; percent is derived.
+            fee = Math.max(0, data.custom_fee || 0);
+            percent =
+                data.principal > 0
+                    ? Math.round((fee / data.principal) * 100)
+                    : 0;
+        } else {
+            percent = Math.max(0, data.custom_percent || 0);
+            fee = computeFee(data.principal, percent);
+        }
 
         return {
             tenorDays,
@@ -217,6 +233,8 @@ export function GadaiForm({
         data.tenor_choice,
         data.custom_days,
         data.custom_percent,
+        data.custom_fee,
+        data.fee_mode,
         data.start_date,
     ]);
 
@@ -931,25 +949,101 @@ export function GadaiForm({
                                             />
                                         </Field>
                                         <Field
-                                            label="Persentase biaya (%)"
-                                            htmlFor="percent"
+                                            label="Biaya titipan"
+                                            hint={
+                                                data.fee_mode === 'nominal'
+                                                    ? `Setara ${calc.percent}% dari dana titipan`
+                                                    : `Setara ${formatRupiah(calc.fee)}`
+                                            }
                                         >
-                                            <Input
-                                                id="percent"
-                                                type="number"
-                                                min={0}
-                                                className="no-spinner tabular-nums"
-                                                value={data.custom_percent}
-                                                onChange={(e) =>
-                                                    setData(
-                                                        'custom_percent',
-                                                        parseInt(
-                                                            e.target.value,
-                                                            10,
-                                                        ) || 0,
-                                                    )
-                                                }
-                                            />
+                                            <div className="flex flex-col gap-2">
+                                                <ToggleGroup
+                                                    type="single"
+                                                    variant="outline"
+                                                    value={data.fee_mode}
+                                                    onValueChange={(v) =>
+                                                        v &&
+                                                        setData(
+                                                            'fee_mode',
+                                                            v as
+                                                                | 'percent'
+                                                                | 'nominal',
+                                                        )
+                                                    }
+                                                    className="w-full"
+                                                >
+                                                    <ToggleGroupItem
+                                                        value="nominal"
+                                                        className="flex-1"
+                                                    >
+                                                        Nominal (Rp)
+                                                    </ToggleGroupItem>
+                                                    <ToggleGroupItem
+                                                        value="percent"
+                                                        className="flex-1"
+                                                    >
+                                                        Persen (%)
+                                                    </ToggleGroupItem>
+                                                </ToggleGroup>
+
+                                                {data.fee_mode === 'nominal' ? (
+                                                    <div className="relative">
+                                                        <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
+                                                            Rp
+                                                        </span>
+                                                        <Input
+                                                            id="custom-fee"
+                                                            inputMode="numeric"
+                                                            value={
+                                                                data.custom_fee
+                                                                    ? data.custom_fee.toLocaleString(
+                                                                          'id-ID',
+                                                                      )
+                                                                    : ''
+                                                            }
+                                                            onChange={(e) =>
+                                                                setData(
+                                                                    'custom_fee',
+                                                                    parseInt(
+                                                                        e.target.value.replace(
+                                                                            /\D/g,
+                                                                            '',
+                                                                        ),
+                                                                        10,
+                                                                    ) || 0,
+                                                                )
+                                                            }
+                                                            placeholder="0"
+                                                            className="pl-9 tabular-nums"
+                                                        />
+                                                    </div>
+                                                ) : (
+                                                    <div className="relative">
+                                                        <Input
+                                                            id="percent"
+                                                            type="number"
+                                                            min={0}
+                                                            className="no-spinner pr-8 tabular-nums"
+                                                            value={
+                                                                data.custom_percent
+                                                            }
+                                                            onChange={(e) =>
+                                                                setData(
+                                                                    'custom_percent',
+                                                                    parseInt(
+                                                                        e.target
+                                                                            .value,
+                                                                        10,
+                                                                    ) || 0,
+                                                                )
+                                                            }
+                                                        />
+                                                        <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">
+                                                            %
+                                                        </span>
+                                                    </div>
+                                                )}
+                                            </div>
                                         </Field>
                                     </>
                                 )}

@@ -115,6 +115,32 @@ test('custom tenor computes its own fee', function () {
         ->and($tx->due_date->toDateString())->toBe('2026-07-22');
 });
 
+test('a custom fee can be entered as a nominal rupiah amount', function () {
+    $user = User::factory()->create();
+    $customer = Customer::create([
+        'code' => 'PLG-001', 'name' => 'A', 'phone' => '081',
+        'join_date' => '2026-07-01',
+    ]);
+
+    $this->actingAs($user)->post('/gadai', [
+        'customer_mode' => 'existing',
+        'customer_code' => $customer->code,
+        'device_name' => 'HP',
+        'kelengkapan' => 'HP saja',
+        'principal' => 500_000,
+        'tenor_choice' => 'custom',
+        'custom_days' => 20,
+        'fee_mode' => 'nominal',
+        'custom_fee' => 75_000,
+        'start_date' => '2026-07-20',
+    ])->assertRedirect();
+
+    $tx = Transaction::first();
+    expect($tx->fee)->toBe(75_000) // exact nominal
+        ->and($tx->fee_percent)->toBe(15) // derived: 75k / 500k
+        ->and($tx->tenor_days)->toBe(20);
+});
+
 test('nota number uses the GCG-date-sequence format and increments per day', function () {
     $user = User::factory()->create();
     $customer = Customer::create([

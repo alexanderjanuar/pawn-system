@@ -23,7 +23,7 @@ export default function Nota({ transaction }: { transaction: Transaction }) {
     return (
         <>
             <Head title={`Nota ${tx.id}`} />
-            <div className="min-h-svh bg-muted/40 py-8 print:bg-white print:py-0">
+            <div className="min-h-svh bg-muted/40 py-8 print:min-h-0 print:bg-white print:py-0">
                 {/* Toolbar (hidden on print) */}
                 <div className="no-print mx-auto mb-6 flex w-full max-w-[760px] items-center justify-between px-4">
                     <Button
@@ -118,23 +118,23 @@ export default function Nota({ transaction }: { transaction: Transaction }) {
                     </FieldBox>
 
                     {/* Ketentuan */}
-                    <ol className="mt-4 list-decimal space-y-1 pl-5 text-[10.5px] leading-snug sm:text-[11px]">
+                    <ol className="mt-4 list-decimal space-y-1 pl-5 text-[10.5px] leading-snug sm:text-[11px] print:mt-3 print:space-y-0.5">
                         {KETENTUAN.map((item, i) => (
                             <li key={i}>{item}</li>
                         ))}
                     </ol>
 
                     {/* Tanda tangan */}
-                    <div className="mt-6 grid grid-cols-2 gap-8 text-sm">
+                    <div className="mt-6 grid grid-cols-2 gap-8 text-sm print:mt-4">
                         <div>
                             <p className="font-medium">Pelanggan</p>
-                            <div className="mt-14 w-44 border-b border-neutral-900 pt-1 text-xs text-neutral-600">
+                            <div className="mt-14 w-44 border-b border-neutral-900 pt-1 text-xs text-neutral-600 print:mt-10">
                                 {tx.customer.name}
                             </div>
                         </div>
                         <div>
                             <p className="font-medium">Petugas,</p>
-                            <div className="mt-14 w-44 border-b border-neutral-900 pt-1 text-xs text-neutral-600">
+                            <div className="mt-14 w-44 border-b border-neutral-900 pt-1 text-xs text-neutral-600 print:mt-10">
                                 {tx.clerk}
                             </div>
                         </div>

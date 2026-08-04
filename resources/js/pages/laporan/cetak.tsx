@@ -50,7 +50,7 @@ export default function LaporanCetak({
     return (
         <>
             <Head title={`Laporan ${periodLabel}`} />
-            <div className="min-h-svh bg-muted/40 py-8 print:bg-white print:py-0">
+            <div className="min-h-svh bg-muted/40 py-8 print:min-h-0 print:bg-white print:py-0">
                 {/* Toolbar (hidden on print) */}
                 <div className="no-print mx-auto mb-6 flex w-full max-w-[860px] items-center justify-between px-4">
                     <Button

@@ -208,6 +208,6 @@ input.no-spinner[type='number'] {
 
     @page {
         size: A4;
-        margin: 14mm;
+        margin: 10mm;
     }
 }

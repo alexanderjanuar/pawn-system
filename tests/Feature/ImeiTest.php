@@ -34,6 +34,26 @@ test('cek-imei finds a prior pawn with the same IMEI', function () {
         ->assertJsonPath('0.code', 'GCG-20260720-0001');
 });
 
+test('cek-imei ignores a device that was already redeemed (DIAMBIL)', function () {
+    $tx = imeiTx('GCG-20260720-0009', '351111111111111');
+    $tx->update(['status' => 'DIAMBIL']);
+
+    $this->actingAs(User::factory()->create())
+        ->getJson('/gadai/cek-imei?imei=351111111111111')
+        ->assertOk()
+        ->assertJsonCount(0);
+});
+
+test('cek-imei ignores a device already sold at auction', function () {
+    $tx = imeiTx('GCG-20260720-0010', '353333333333333');
+    $tx->update(['status' => 'LELANG', 'sale_value' => 800_000, 'sold_at' => now()]);
+
+    $this->actingAs(User::factory()->create())
+        ->getJson('/gadai/cek-imei?imei=353333333333333')
+        ->assertOk()
+        ->assertJsonCount(0);
+});
+
 test('cek-imei also matches the second IMEI slot', function () {
     imeiTx('GCG-20260720-0002', '351111111111111', '352222222222222');
 

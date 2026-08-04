@@ -21,7 +21,7 @@ import {
     X,
 } from 'lucide-react';
 import { useState } from 'react';
-import type { FormEvent } from 'react';
+import type { FormEvent, ReactNode } from 'react';
 import { DatePicker } from '@/components/gadai/date-picker';
 import { ImageLightbox } from '@/components/gadai/image-lightbox';
 import { PageHeader } from '@/components/gadai/page-header';
@@ -83,6 +83,8 @@ export default function TransaksiShow({
     const d = daysUntil(tx.dueDate);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [saleOpen, setSaleOpen] = useState(false);
+    const [lelangOpen, setLelangOpen] = useState(false);
+    const [revertOpen, setRevertOpen] = useState(false);
 
     const lelang = tx.status === 'LELANG';
     const saleNet = tx.saleValue != null ? tx.saleValue - tx.principal : null;
@@ -96,7 +98,17 @@ export default function TransaksiShow({
     const reject = () =>
         router.post(`/transaksi/${tx.id}/reject`, {}, { preserveScroll: true });
     const markLelang = () =>
-        router.post(`/transaksi/${tx.id}/lelang`, {}, { preserveScroll: true });
+        router.post(
+            `/transaksi/${tx.id}/lelang`,
+            {},
+            { preserveScroll: true, onSuccess: () => setLelangOpen(false) },
+        );
+    const revertLelang = () =>
+        router.post(
+            `/transaksi/${tx.id}/lelang/batal`,
+            {},
+            { preserveScroll: true, onSuccess: () => setRevertOpen(false) },
+        );
 
     return (
         <>
@@ -167,7 +179,9 @@ export default function TransaksiShow({
                                         </Link>
                                     </DropdownMenuItem>
                                     {running && (
-                                        <DropdownMenuItem onClick={markLelang}>
+                                        <DropdownMenuItem
+                                            onSelect={() => setLelangOpen(true)}
+                                        >
                                             <Gavel />
                                             Tandai Lelang
                                         </DropdownMenuItem>
@@ -189,6 +203,24 @@ export default function TransaksiShow({
                         tx={tx}
                         open={deleteOpen}
                         onOpenChange={setDeleteOpen}
+                    />
+                    <ConfirmDialog
+                        open={lelangOpen}
+                        onOpenChange={setLelangOpen}
+                        title="Tandai untuk Lelang?"
+                        description={`Barang ${tx.id} akan ditandai untuk dilelang. Pelanggan tidak lagi bisa menebus sampai lelang dibatalkan.`}
+                        confirmLabel="Tandai Lelang"
+                        onConfirm={markLelang}
+                        icon={<Gavel />}
+                    />
+                    <ConfirmDialog
+                        open={revertOpen}
+                        onOpenChange={setRevertOpen}
+                        title="Batalkan Lelang?"
+                        description={`Barang ${tx.id} dikembalikan dari lelang menjadi Aktif, sehingga bisa ditebus atau diperpanjang lagi.`}
+                        confirmLabel="Batal Lelang"
+                        onConfirm={revertLelang}
+                        icon={<RefreshCw />}
                     />
                     <RecordSaleDialog
                         tx={tx}
@@ -298,13 +330,25 @@ export default function TransaksiShow({
                                         </h2>
                                     </div>
                                     {tx.saleValue == null && (
-                                        <Button
-                                            size="sm"
-                                            onClick={() => setSaleOpen(true)}
-                                        >
-                                            <Coins />
-                                            Catat Penjualan
-                                        </Button>
+                                        <div className="flex items-center gap-2">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() =>
+                                                    setRevertOpen(true)
+                                                }
+                                            >
+                                                <RefreshCw />
+                                                Batal Lelang
+                                            </Button>
+                                            <Button
+                                                size="sm"
+                                                onClick={() => setSaleOpen(true)}
+                                            >
+                                                <Coins />
+                                                Catat Penjualan
+                                            </Button>
+                                        </div>
                                     )}
                                 </div>
                                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
@@ -603,6 +647,44 @@ function PhotoThumb({ url, label }: { url: string; label: string }) {
                 </span>
             </button>
         </ImageLightbox>
+    );
+}
+
+function ConfirmDialog({
+    open,
+    onOpenChange,
+    title,
+    description,
+    confirmLabel,
+    onConfirm,
+    icon,
+}: {
+    open: boolean;
+    onOpenChange: (value: boolean) => void;
+    title: string;
+    description: string;
+    confirmLabel: string;
+    onConfirm: () => void;
+    icon?: ReactNode;
+}) {
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>{title}</DialogTitle>
+                    <DialogDescription>{description}</DialogDescription>
+                </DialogHeader>
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button variant="outline">Batal</Button>
+                    </DialogClose>
+                    <Button onClick={onConfirm}>
+                        {icon}
+                        {confirmLabel}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
     );
 }
 

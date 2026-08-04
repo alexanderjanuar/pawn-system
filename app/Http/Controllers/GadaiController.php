@@ -61,8 +61,11 @@ class GadaiController extends Controller
             return response()->json([]);
         }
 
+        // Only warn about pawns still physically held (not yet redeemed/sold);
+        // an IMEI whose device was already taken back can be pawned again.
         $matches = Transaction::query()
             ->with('customer')
+            ->held()
             ->where(function ($q) use ($imei) {
                 $q->where('imei_1', $imei)->orWhere('imei_2', $imei);
             })
@@ -444,6 +447,36 @@ class GadaiController extends Controller
         );
 
         return back()->with('success', "Transaksi {$transaction->code} ditandai lelang.");
+    }
+
+    public function revertLelang(Request $request, Transaction $transaction): RedirectResponse
+    {
+        if ($transaction->status !== 'LELANG') {
+            return back()->with('error', 'Transaksi ini tidak sedang dalam status lelang.');
+        }
+
+        if ($transaction->sold_at !== null || $transaction->sale_value !== null) {
+            return back()->with('error', 'Barang sudah terjual, lelang tidak bisa dibatalkan.');
+        }
+
+        $transaction->update(['status' => 'AKTIF']);
+
+        $transaction->events()->create([
+            'type' => 'auctioned',
+            'event_date' => now(),
+            'title' => 'Dibatalkan dari lelang',
+            'by' => $request->user()?->name,
+        ]);
+
+        ActivityLog::record(
+            'updated',
+            'transaction',
+            $transaction->code,
+            $transaction->customer->name,
+            'Membatalkan lelang',
+        );
+
+        return back()->with('success', "Transaksi {$transaction->code} dikembalikan dari lelang.");
     }
 
     public function recordSale(Request $request, Transaction $transaction): RedirectResponse

@@ -1,4 +1,4 @@
-import { Head, router } from '@inertiajs/react';
+import { Head, router, usePage } from '@inertiajs/react';
 import { Info, PackageSearch, Search, ShieldCheck } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
@@ -7,7 +7,13 @@ import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { daysUntil, dueLabel, formatDate, formatRupiah } from '@/lib/format';
+import {
+    daysUntil,
+    dueLabel,
+    formatDate,
+    formatRupiah,
+    setServerToday,
+} from '@/lib/format';
 import { STATUS_META } from '@/lib/gadai';
 import { cn } from '@/lib/utils';
 import type { Transaction } from '@/types/gadai';
@@ -21,6 +27,7 @@ export default function CekStatus({
     searched: boolean;
     query: { kode: string; hp: string };
 }) {
+    setServerToday(usePage().props.serverDate);
     const [kode, setKode] = useState(query.kode ?? '');
     const [phone, setPhone] = useState(query.hp ?? '');
 

@@ -18,6 +18,7 @@ declare module '@inertiajs/core' {
             stores: { id: number; name: string; code: string }[];
             activeStore: number | 'all';
             activeStoreName: string | null;
+            serverDate: string; // YYYY-MM-DD, WITA — authoritative "today"
             flash: {
                 success: string | null;
                 error: string | null;

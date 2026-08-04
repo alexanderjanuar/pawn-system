@@ -1357,7 +1357,7 @@ function ImeiField({
                 <div className="mt-1.5 rounded-lg border border-overdue/30 bg-overdue-soft/40 p-2.5 text-xs">
                     <p className="flex items-center gap-1.5 font-medium text-overdue">
                         <AlertTriangle className="size-3.5 shrink-0" />
-                        IMEI ini pernah digadaikan
+                        IMEI ini masih dalam gadai berjalan
                     </p>
                     <ul className="mt-1 space-y-0.5 text-muted-foreground">
                         {matches.map((m) => (

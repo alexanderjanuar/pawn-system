@@ -1,15 +1,26 @@
 /**
  * Formatting + date helpers for the pawn system.
- * TODAY is the real current date (at local midnight) so relative labels like
- * "15 hari lagi" and overdue counts reflect the actual day.
+ * TODAY drives relative labels like "15 hari lagi" and overdue checks. It
+ * defaults to the device date but is overridden with the server date (WITA)
+ * shared on every page, so an incorrect device clock cannot skew due dates.
  */
 
-export const TODAY = (() => {
+export let TODAY = (() => {
     const now = new Date();
     now.setHours(0, 0, 0, 0);
 
     return now;
 })();
+
+/**
+ * Override TODAY with the authoritative server date (YYYY-MM-DD, WITA). Called
+ * from the app shell on every page using the shared `serverDate` prop.
+ */
+export function setServerToday(iso?: string | null): void {
+    if (iso && /^\d{4}-\d{2}-\d{2}$/.test(iso)) {
+        TODAY = new Date(`${iso}T00:00:00`);
+    }
+}
 
 const rupiah = new Intl.NumberFormat('id-ID', {
     style: 'currency',

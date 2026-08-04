@@ -41,6 +41,28 @@ test('a redeemed item cannot be marked for auction', function () {
     expect($tx->refresh()->status)->toBe('DIAMBIL');
 });
 
+test('a lelang item can be reverted back to active', function () {
+    $tx = lelangTx('LELANG');
+
+    $this->actingAs(User::factory()->create())
+        ->post("/transaksi/{$tx->code}/lelang/batal")
+        ->assertRedirect();
+
+    expect($tx->refresh()->status)->toBe('AKTIF')
+        ->and($tx->events()->where('title', 'Dibatalkan dari lelang')->count())->toBe(1);
+});
+
+test('a sold lelang item cannot be reverted', function () {
+    $tx = lelangTx('LELANG');
+    $tx->update(['sale_value' => 1_500_000, 'sold_at' => now()]);
+
+    $this->actingAs(User::factory()->create())
+        ->post("/transaksi/{$tx->code}/lelang/batal")
+        ->assertRedirect();
+
+    expect($tx->refresh()->status)->toBe('LELANG');
+});
+
 test('a sale can be recorded for a lelang item', function () {
     $tx = lelangTx('LELANG');
 

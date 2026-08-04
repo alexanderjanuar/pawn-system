@@ -53,6 +53,7 @@ class HandleInertiaRequests extends Middleware
                 : 0,
             'approvalThreshold' => (int) Setting::get('approval_threshold', Transaction::APPROVAL_THRESHOLD),
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
+            'serverDate' => now()->toDateString(),
             ...$this->storeProps($request),
         ];
     }

@@ -56,6 +56,7 @@ Route::middleware(['auth', 'active-store'])->group(function () {
 
     // Lelang
     Route::post('transaksi/{transaction}/lelang', [GadaiController::class, 'lelang'])->name('transaksi.lelang');
+    Route::post('transaksi/{transaction}/lelang/batal', [GadaiController::class, 'revertLelang'])->name('transaksi.lelang.revert');
     Route::post('transaksi/{transaction}/sale', [GadaiController::class, 'recordSale'])->name('transaksi.sale');
     Route::get('transaksi/{transaction}', [TransaksiController::class, 'show'])->name('transaksi.show');
     Route::get('transaksi/{transaction}/nota', [TransaksiController::class, 'nota'])->name('transaksi.nota');

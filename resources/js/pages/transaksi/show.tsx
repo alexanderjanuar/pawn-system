@@ -22,7 +22,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { toast } from 'sonner';
+import { DatePicker } from '@/components/gadai/date-picker';
 import { ImageLightbox } from '@/components/gadai/image-lightbox';
 import { PageHeader } from '@/components/gadai/page-header';
 import { QrLightbox } from '@/components/gadai/qr-lightbox';
@@ -50,6 +50,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import {
     addDays,
     daysUntil,
@@ -57,7 +58,7 @@ import {
     formatDate,
     formatRupiah,
 } from '@/lib/format';
-import { STATUS_META } from '@/lib/gadai';
+import { computeFee, STATUS_META } from '@/lib/gadai';
 import { cn } from '@/lib/utils';
 import type { HistoryEntry, Transaction } from '@/types/gadai';
 
@@ -655,10 +656,47 @@ function DeleteTransactionDialog({
 
 function PerpanjangDialog({ tx }: { tx: Transaction }) {
     const [open, setOpen] = useState(false);
-    const newDue = addDays(tx.dueDate, tx.tenorDays);
+    const { data, setData, post, processing, errors, reset, clearErrors } =
+        useForm({
+            mode: '15' as '15' | '30' | 'custom',
+            until: addDays(tx.dueDate, 15),
+            fee: computeFee(tx.principal, 10),
+        });
+
+    const newDue =
+        data.mode === '15'
+            ? addDays(tx.dueDate, 15)
+            : data.mode === '30'
+              ? addDays(tx.dueDate, 30)
+              : data.until;
+    const fee =
+        data.mode === '15'
+            ? computeFee(tx.principal, 10)
+            : data.mode === '30'
+              ? computeFee(tx.principal, 15)
+              : Math.max(0, data.fee || 0);
+
+    const submit = () =>
+        post(`/transaksi/${tx.id}/perpanjang`, {
+            preserveScroll: true,
+            onSuccess: () => {
+                setOpen(false);
+                reset();
+            },
+        });
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog
+            open={open}
+            onOpenChange={(o) => {
+                setOpen(o);
+
+                if (!o) {
+                    reset();
+                    clearErrors();
+                }
+            }}
+        >
             <DialogTrigger asChild>
                 <Button variant="outline">
                     <RefreshCw />
@@ -673,10 +711,106 @@ function PerpanjangDialog({ tx }: { tx: Transaction }) {
                         jangka waktu.
                     </DialogDescription>
                 </DialogHeader>
+
+                <div className="grid gap-1.5">
+                    <Label>Perpanjang</Label>
+                    <ToggleGroup
+                        type="single"
+                        variant="outline"
+                        value={data.mode}
+                        onValueChange={(v) =>
+                            v && setData('mode', v as '15' | '30' | 'custom')
+                        }
+                        className="w-full"
+                    >
+                        <ToggleGroupItem
+                            value="15"
+                            className="h-auto flex-1 flex-col gap-0 py-2"
+                        >
+                            <span className="font-medium">15 Hari</span>
+                            <span className="text-xs text-muted-foreground">
+                                biaya 10%
+                            </span>
+                        </ToggleGroupItem>
+                        <ToggleGroupItem
+                            value="30"
+                            className="h-auto flex-1 flex-col gap-0 py-2"
+                        >
+                            <span className="font-medium">30 Hari</span>
+                            <span className="text-xs text-muted-foreground">
+                                biaya 15%
+                            </span>
+                        </ToggleGroupItem>
+                        <ToggleGroupItem
+                            value="custom"
+                            className="h-auto flex-1 flex-col gap-0 py-2"
+                        >
+                            <span className="font-medium">Custom</span>
+                            <span className="text-xs text-muted-foreground">
+                                sampai tanggal
+                            </span>
+                        </ToggleGroupItem>
+                    </ToggleGroup>
+                </div>
+
+                {data.mode === 'custom' && (
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="until">Perpanjang sampai</Label>
+                            <DatePicker
+                                id="until"
+                                value={data.until}
+                                onChange={(v) => setData('until', v)}
+                            />
+                            {errors.until && (
+                                <p className="text-xs text-destructive">
+                                    {errors.until}
+                                </p>
+                            )}
+                        </div>
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="perpanjang-fee">Biaya titipan</Label>
+                            <div className="relative">
+                                <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
+                                    Rp
+                                </span>
+                                <Input
+                                    id="perpanjang-fee"
+                                    inputMode="numeric"
+                                    value={
+                                        data.fee
+                                            ? data.fee.toLocaleString('id-ID')
+                                            : ''
+                                    }
+                                    onChange={(e) =>
+                                        setData(
+                                            'fee',
+                                            parseInt(
+                                                e.target.value.replace(
+                                                    /\D/g,
+                                                    '',
+                                                ),
+                                                10,
+                                            ) || 0,
+                                        )
+                                    }
+                                    placeholder="0"
+                                    className="pl-9 tabular-nums"
+                                />
+                            </div>
+                            {errors.fee && (
+                                <p className="text-xs text-destructive">
+                                    {errors.fee}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                )}
+
                 <dl className="space-y-2 rounded-lg border bg-muted/30 p-4 text-sm">
                     <Row
                         label="Biaya titipan dibayar"
-                        value={formatRupiah(tx.fee)}
+                        value={formatRupiah(fee)}
                         strong
                     />
                     <Row
@@ -684,7 +818,7 @@ function PerpanjangDialog({ tx }: { tx: Transaction }) {
                         value={formatDate(tx.dueDate)}
                     />
                     <Row
-                        label={`Jatuh tempo baru (+${tx.tenorDays} hari)`}
+                        label="Jatuh tempo baru"
                         value={formatDate(newDue)}
                         strong
                     />
@@ -693,14 +827,7 @@ function PerpanjangDialog({ tx }: { tx: Transaction }) {
                     <DialogClose asChild>
                         <Button variant="outline">Batal</Button>
                     </DialogClose>
-                    <Button
-                        onClick={() => {
-                            setOpen(false);
-                            toast.success('Gadai diperpanjang (preview)', {
-                                description: `Jatuh tempo baru: ${formatDate(newDue)}.`,
-                            });
-                        }}
-                    >
+                    <Button onClick={submit} disabled={processing}>
                         <RefreshCw />
                         Konfirmasi Perpanjang
                     </Button>

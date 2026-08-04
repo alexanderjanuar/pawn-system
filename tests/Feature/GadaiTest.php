@@ -328,6 +328,73 @@ test('a redeemed transaction cannot be redeemed again', function () {
     expect($tx->events()->where('type', 'redeemed')->count())->toBe(0);
 });
 
+test('a gadai can be extended by a preset period', function () {
+    $user = User::factory()->create();
+    $customer = Customer::create([
+        'code' => 'PLG-001', 'name' => 'A', 'phone' => '081', 'join_date' => '2026-07-01',
+    ]);
+    $tx = Transaction::create([
+        'code' => 'GCG-20260720-0001', 'customer_id' => $customer->id,
+        'device_owner' => 'A', 'device_name' => 'HP', 'kelengkapan' => 'HP saja',
+        'principal' => 1_000_000, 'tenor_days' => 15, 'fee_percent' => 10, 'fee' => 100_000,
+        'start_date' => '2026-07-20', 'due_date' => '2026-08-04', 'status' => 'AKTIF',
+        'approval_status' => 'approved', 'clerk' => 'Rina', 'extensions' => 0,
+    ]);
+
+    $this->actingAs($user)->post("/transaksi/{$tx->code}/perpanjang", ['mode' => '15'])->assertRedirect();
+
+    $tx->refresh();
+    expect($tx->status)->toBe('PERPANJANG')
+        ->and($tx->due_date->toDateString())->toBe('2026-08-19')
+        ->and($tx->fee)->toBe(100_000)
+        ->and($tx->extensions)->toBe(1)
+        ->and($tx->events()->where('type', 'extended')->count())->toBe(1);
+});
+
+test('a gadai can be extended to a custom date with a nominal fee', function () {
+    $user = User::factory()->create();
+    $customer = Customer::create([
+        'code' => 'PLG-001', 'name' => 'A', 'phone' => '081', 'join_date' => '2026-07-01',
+    ]);
+    $tx = Transaction::create([
+        'code' => 'GCG-20260720-0001', 'customer_id' => $customer->id,
+        'device_owner' => 'A', 'device_name' => 'HP', 'kelengkapan' => 'HP saja',
+        'principal' => 1_000_000, 'tenor_days' => 15, 'fee_percent' => 10, 'fee' => 100_000,
+        'start_date' => '2026-07-20', 'due_date' => '2026-08-04', 'status' => 'AKTIF',
+        'approval_status' => 'approved', 'clerk' => 'Rina', 'extensions' => 0,
+    ]);
+
+    $this->actingAs($user)->post("/transaksi/{$tx->code}/perpanjang", [
+        'mode' => 'custom', 'until' => '2026-09-01', 'fee' => 250_000,
+    ])->assertRedirect();
+
+    $tx->refresh();
+    expect($tx->due_date->toDateString())->toBe('2026-09-01')
+        ->and($tx->fee)->toBe(250_000)
+        ->and($tx->fee_percent)->toBe(25)
+        ->and($tx->status)->toBe('PERPANJANG');
+});
+
+test('a custom extension date must be after the current due date', function () {
+    $user = User::factory()->create();
+    $customer = Customer::create([
+        'code' => 'PLG-001', 'name' => 'A', 'phone' => '081', 'join_date' => '2026-07-01',
+    ]);
+    $tx = Transaction::create([
+        'code' => 'GCG-20260720-0001', 'customer_id' => $customer->id,
+        'device_owner' => 'A', 'device_name' => 'HP', 'kelengkapan' => 'HP saja',
+        'principal' => 1_000_000, 'tenor_days' => 15, 'fee_percent' => 10, 'fee' => 100_000,
+        'start_date' => '2026-07-20', 'due_date' => '2026-08-04', 'status' => 'AKTIF',
+        'approval_status' => 'approved', 'clerk' => 'Rina', 'extensions' => 0,
+    ]);
+
+    $this->actingAs($user)->post("/transaksi/{$tx->code}/perpanjang", [
+        'mode' => 'custom', 'until' => '2026-07-30', 'fee' => 100_000,
+    ])->assertSessionHasErrors('until');
+
+    expect($tx->fresh()->status)->toBe('AKTIF');
+});
+
 test('a gadai requires a device name and principal', function () {
     $user = User::factory()->create();
 

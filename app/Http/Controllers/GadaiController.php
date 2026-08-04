@@ -366,6 +366,60 @@ class GadaiController extends Controller
         return back()->with('success', "Transaksi {$transaction->code} ditebus & diambil.");
     }
 
+    public function extend(Request $request, Transaction $transaction): RedirectResponse
+    {
+        if (! in_array($transaction->status, ['AKTIF', 'PERPANJANG', 'TIDAK_DIAMBIL'], true)) {
+            return back()->with('error', 'Transaksi ini tidak bisa diperpanjang.');
+        }
+
+        $data = $request->validate([
+            'mode' => ['required', 'in:15,30,custom'],
+            'until' => ['required_if:mode,custom', 'nullable', 'date', 'after:'.$transaction->due_date->toDateString()],
+            'fee' => ['required_if:mode,custom', 'nullable', 'integer', 'min:0'],
+        ]);
+
+        $principal = $transaction->principal;
+        $currentDue = $transaction->due_date;
+
+        if ($data['mode'] === 'custom') {
+            $newDue = Carbon::parse($data['until']);
+            $fee = (int) ($data['fee'] ?? 0);
+            $percent = $principal > 0 ? (int) round($fee / $principal * 100) : 0;
+        } else {
+            $days = (int) $data['mode'];
+            $percent = $days === 15 ? 10 : 15;
+            $newDue = $currentDue->copy()->addDays($days);
+            $fee = (int) round($principal * $percent / 100);
+        }
+
+        $transaction->update([
+            'status' => 'PERPANJANG',
+            'due_date' => $newDue,
+            'tenor_days' => (int) $currentDue->diffInDays($newDue),
+            'fee' => $fee,
+            'fee_percent' => $percent,
+            'extensions' => $transaction->extensions + 1,
+        ]);
+
+        $transaction->events()->create([
+            'type' => 'extended',
+            'event_date' => now(),
+            'title' => 'Diperpanjang s/d '.$newDue->format('d M Y'),
+            'by' => $request->user()?->name,
+            'amount' => $fee,
+        ]);
+
+        ActivityLog::record(
+            'updated',
+            'transaction',
+            $transaction->code,
+            $transaction->customer->name,
+            'Memperpanjang s/d '.$newDue->format('Y-m-d'),
+        );
+
+        return back()->with('success', "Gadai {$transaction->code} diperpanjang s/d ".$newDue->format('d M Y').'.');
+    }
+
     public function lelang(Request $request, Transaction $transaction): RedirectResponse
     {
         if (in_array($transaction->status, ['DIAMBIL', 'LELANG'], true)) {

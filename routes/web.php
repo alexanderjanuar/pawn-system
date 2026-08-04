@@ -50,8 +50,9 @@ Route::middleware(['auth', 'active-store'])->group(function () {
         Route::post('transaksi/{transaction}/reject', [GadaiController::class, 'reject'])->name('transaksi.reject');
     });
 
-    // Tebus (redeem & take)
+    // Tebus (redeem & take) + Perpanjang (extend)
     Route::post('transaksi/{transaction}/tebus', [GadaiController::class, 'redeem'])->name('transaksi.redeem');
+    Route::post('transaksi/{transaction}/perpanjang', [GadaiController::class, 'extend'])->name('transaksi.extend');
 
     // Lelang
     Route::post('transaksi/{transaction}/lelang', [GadaiController::class, 'lelang'])->name('transaksi.lelang');

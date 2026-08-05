@@ -28,6 +28,7 @@ class PiutangSeeder extends Seeder
             'debtor_name' => 'Rina',
             'device_name' => 'Redmi 13C',
             'price' => 1_800_000,
+            'down_payment' => 300_000,
             'date' => $date,
             'status' => 'berjalan',
             'clerk' => 'Rina',

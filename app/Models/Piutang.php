@@ -22,14 +22,15 @@ use Illuminate\Support\Carbon;
  * @property string $debtor_name
  * @property string $device_name
  * @property int $price
+ * @property int $down_payment
  * @property Carbon $date
  * @property string $status
  * @property string|null $clerk
  * @property string|null $notes
  */
 #[Fillable([
-    'store_id', 'code', 'debtor_name', 'device_name', 'price', 'date',
-    'status', 'clerk', 'notes',
+    'store_id', 'code', 'debtor_name', 'device_name', 'price', 'down_payment',
+    'date', 'status', 'clerk', 'notes',
 ])]
 class Piutang extends Model
 {
@@ -38,6 +39,7 @@ class Piutang extends Model
         return [
             'date' => 'date',
             'price' => 'integer',
+            'down_payment' => 'integer',
         ];
     }
 
@@ -67,7 +69,8 @@ class Piutang extends Model
 
     /**
      * Replace the schedule with $count equal termins, due monthly from $start.
-     * The last termin absorbs any rounding remainder so the sum equals price.
+     * The last termin absorbs any rounding remainder so the sum equals the
+     * financed amount (price minus DP).
      */
     public function generateTermins(int $count, CarbonInterface $start): void
     {
@@ -77,11 +80,12 @@ class Piutang extends Model
             return;
         }
 
-        $base = intdiv($this->price, $count);
+        $financed = $this->financed();
+        $base = intdiv($financed, $count);
         $due = Carbon::parse($start);
 
         for ($i = 1; $i <= $count; $i++) {
-            $amount = $i === $count ? $this->price - $base * ($count - 1) : $base;
+            $amount = $i === $count ? $financed - $base * ($count - 1) : $base;
 
             $this->termins()->create([
                 'seq' => $i,
@@ -119,7 +123,13 @@ class Piutang extends Model
         })->all();
     }
 
-    /** Total already paid (from loaded payments when available). */
+    /** Amount to be paid in installments: total price minus the down payment. */
+    public function financed(): int
+    {
+        return max(0, $this->price - $this->down_payment);
+    }
+
+    /** Total already paid in installments (from loaded payments when available). */
     public function paid(): int
     {
         return (int) ($this->relationLoaded('payments')
@@ -127,10 +137,10 @@ class Piutang extends Model
             : $this->payments()->sum('amount'));
     }
 
-    /** Remaining balance still owed. */
+    /** Remaining installment balance still owed (excludes the DP). */
     public function remaining(): int
     {
-        return max(0, $this->price - $this->paid());
+        return max(0, $this->financed() - $this->paid());
     }
 
     public function isLunas(): bool

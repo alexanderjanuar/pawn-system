@@ -30,6 +30,8 @@ type Row = {
     debtorName: string;
     deviceName: string;
     price: number;
+    downPayment: number;
+    financed: number;
     paid: number;
     remaining: number;
     status: PiutangStatus;
@@ -236,6 +238,9 @@ export default function PiutangIndex({
                                             </Link>
                                             <div className="text-xs text-muted-foreground">
                                                 {formatDate(p.date)}
+                                                {p.downPayment > 0
+                                                    ? ` · DP ${formatRupiah(p.downPayment)}`
+                                                    : ''}
                                                 {showStore && p.storeName
                                                     ? ` · ${p.storeName}`
                                                     : ''}
@@ -338,10 +343,17 @@ function TambahPiutangDialog({ petugasList }: { petugasList: string[] }) {
         debtor_name: '',
         device_name: '',
         price: 0,
+        down_payment: 0,
         date: TODAY.toISOString().slice(0, 10),
         termin_count: 0,
         notes: '',
     });
+
+    const financed = Math.max(0, form.data.price - form.data.down_payment);
+    const perTermin =
+        form.data.termin_count >= 2
+            ? Math.floor(financed / form.data.termin_count)
+            : financed;
 
     const submit = () => {
         // 0/1 = no schedule; the backend expects null or >= 2.
@@ -463,6 +475,46 @@ function TambahPiutangDialog({ petugasList }: { petugasList: string[] }) {
                             )}
                         </div>
                         <div className="grid gap-1.5">
+                            <Label htmlFor="dp">DP / uang muka</Label>
+                            <div className="relative">
+                                <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
+                                    Rp
+                                </span>
+                                <Input
+                                    id="dp"
+                                    inputMode="numeric"
+                                    value={
+                                        form.data.down_payment
+                                            ? form.data.down_payment.toLocaleString(
+                                                  'id-ID',
+                                              )
+                                            : ''
+                                    }
+                                    onChange={(e) =>
+                                        form.setData(
+                                            'down_payment',
+                                            parseInt(
+                                                e.target.value.replace(
+                                                    /\D/g,
+                                                    '',
+                                                ),
+                                                10,
+                                            ) || 0,
+                                        )
+                                    }
+                                    placeholder="0"
+                                    className="pl-9 tabular-nums"
+                                />
+                            </div>
+                            {form.errors.down_payment && (
+                                <p className="text-xs text-destructive">
+                                    {form.errors.down_payment}
+                                </p>
+                            )}
+                        </div>
+                    </div>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="grid gap-1.5">
                             <Label htmlFor="tgl">Tanggal ambil</Label>
                             <DatePicker
                                 id="tgl"
@@ -470,29 +522,35 @@ function TambahPiutangDialog({ petugasList }: { petugasList: string[] }) {
                                 onChange={(v) => form.setData('date', v)}
                             />
                         </div>
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="termin">
+                                Jumlah termin (opsional)
+                            </Label>
+                            <Input
+                                id="termin"
+                                type="number"
+                                min={0}
+                                value={form.data.termin_count || ''}
+                                onChange={(e) =>
+                                    form.setData(
+                                        'termin_count',
+                                        parseInt(e.target.value, 10) || 0,
+                                    )
+                                }
+                                placeholder="cth. 3"
+                                className="no-spinner tabular-nums"
+                            />
+                        </div>
                     </div>
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="termin">Jumlah termin (opsional)</Label>
-                        <Input
-                            id="termin"
-                            type="number"
-                            min={0}
-                            value={form.data.termin_count || ''}
-                            onChange={(e) =>
-                                form.setData(
-                                    'termin_count',
-                                    parseInt(e.target.value, 10) || 0,
-                                )
-                            }
-                            placeholder="cth. 3"
-                            className="no-spinner tabular-nums"
-                        />
-                        <p className="text-xs text-muted-foreground">
-                            {form.data.termin_count >= 2
-                                ? `Dibagi rata jadi ${form.data.termin_count}x cicilan, jatuh tempo tiap bulan.`
-                                : 'Kosongkan untuk bayar bebas tanpa jadwal termin.'}
-                        </p>
-                    </div>
+                    <p className="rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                        Sisa dicicil:{' '}
+                        <span className="font-medium text-foreground tabular-nums">
+                            {formatRupiah(financed)}
+                        </span>
+                        {form.data.termin_count >= 2
+                            ? ` · ${form.data.termin_count}x @ ± ${formatRupiah(perTermin)}, jatuh tempo tiap bulan`
+                            : ' · bayar bebas tanpa jadwal termin'}
+                    </p>
                     <div className="grid gap-1.5">
                         <Label htmlFor="catatan">Catatan</Label>
                         <Textarea

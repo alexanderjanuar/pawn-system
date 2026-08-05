@@ -29,6 +29,7 @@ class PiutangController extends Controller
 
         $rows = $piutangs->map(function (Piutang $p) use ($today): array {
             $paid = (int) ($p->paid ?? 0);
+            $financed = max(0, $p->price - $p->down_payment);
 
             // Any termin past due and not yet covered by payments (applied in order).
             $late = false;
@@ -50,8 +51,10 @@ class PiutangController extends Controller
                 'debtorName' => $p->debtor_name,
                 'deviceName' => $p->device_name,
                 'price' => $p->price,
+                'downPayment' => $p->down_payment,
+                'financed' => $financed,
                 'paid' => $paid,
-                'remaining' => max(0, $p->price - $paid),
+                'remaining' => max(0, $financed - $paid),
                 'status' => $p->status,
                 'terminCount' => $p->termins->count(),
                 'late' => $late,
@@ -89,8 +92,10 @@ class PiutangController extends Controller
                 'debtorName' => $piutang->debtor_name,
                 'deviceName' => $piutang->device_name,
                 'price' => $piutang->price,
+                'downPayment' => $piutang->down_payment,
+                'financed' => $piutang->financed(),
                 'paid' => $paid,
-                'remaining' => max(0, $piutang->price - $paid),
+                'remaining' => $piutang->remaining(),
                 'status' => $piutang->status,
                 'date' => $piutang->date->format('Y-m-d'),
                 'clerk' => $piutang->clerk,
@@ -121,6 +126,7 @@ class PiutangController extends Controller
             'debtor_name' => ['required', 'string', 'max:120'],
             'device_name' => ['required', 'string', 'max:120'],
             'price' => ['required', 'integer', 'min:1'],
+            'down_payment' => ['nullable', 'integer', 'min:0', 'lte:price'],
             'date' => ['required', 'date'],
             'clerk' => ['nullable', 'string', 'max:120'],
             'notes' => ['nullable', 'string', 'max:1000'],
@@ -135,6 +141,7 @@ class PiutangController extends Controller
             'debtor_name' => $data['debtor_name'],
             'device_name' => $data['device_name'],
             'price' => $data['price'],
+            'down_payment' => $data['down_payment'] ?? 0,
             'date' => $data['date'],
             'status' => 'berjalan',
             'clerk' => ($data['clerk'] ?? '') ?: ($request->user()?->name ?? 'Petugas'),
@@ -158,11 +165,19 @@ class PiutangController extends Controller
             'debtor_name' => ['required', 'string', 'max:120'],
             'device_name' => ['required', 'string', 'max:120'],
             'price' => ['required', 'integer', 'min:1'],
+            'down_payment' => ['nullable', 'integer', 'min:0', 'lte:price'],
             'date' => ['required', 'date'],
             'notes' => ['nullable', 'string', 'max:1000'],
         ]);
 
+        $data['down_payment'] ??= 0;
         $piutang->update($data);
+
+        // Keep the termin schedule in step with an edited total/date.
+        if ($piutang->termins()->exists()) {
+            $piutang->generateTermins($piutang->termins()->count(), $piutang->date);
+        }
+
         $piutang->syncStatus();
 
         ActivityLog::record('updated', 'piutang', $piutang->code, $piutang->debtor_name, 'Memperbarui piutang');

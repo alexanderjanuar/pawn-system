@@ -58,6 +58,8 @@ type Piutang = {
     debtorName: string;
     deviceName: string;
     price: number;
+    downPayment: number;
+    financed: number;
     paid: number;
     remaining: number;
     status: 'berjalan' | 'lunas';
@@ -83,8 +85,8 @@ export default function PiutangShow({
 
     const lunas = piutang.status === 'lunas';
     const ratio =
-        piutang.price > 0
-            ? Math.min(1, piutang.paid / piutang.price)
+        piutang.financed > 0
+            ? Math.min(1, piutang.paid / piutang.financed)
             : lunas
               ? 1
               : 0;
@@ -127,47 +129,59 @@ export default function PiutangShow({
                             </div>
                         </div>
 
-                        {canManage && (
-                            <DropdownMenu>
-                                <DropdownMenuTrigger asChild>
-                                    <Button variant="outline" size="icon">
-                                        <MoreVertical />
-                                    </Button>
-                                </DropdownMenuTrigger>
-                                <DropdownMenuContent align="end">
-                                    <DropdownMenuItem
-                                        onSelect={() => setEditOpen(true)}
-                                    >
-                                        <Pencil />
-                                        Edit
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem
-                                        variant="destructive"
-                                        onSelect={() => setDeleteOpen(true)}
-                                    >
-                                        <Trash2 />
-                                        Hapus
-                                    </DropdownMenuItem>
-                                </DropdownMenuContent>
-                            </DropdownMenu>
-                        )}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="outline" size="icon">
+                                    <MoreVertical />
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="end">
+                                <DropdownMenuItem
+                                    onSelect={() => setEditOpen(true)}
+                                >
+                                    <Pencil />
+                                    Edit
+                                </DropdownMenuItem>
+                                {canManage && (
+                                    <>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                            variant="destructive"
+                                            onSelect={() => setDeleteOpen(true)}
+                                        >
+                                            <Trash2 />
+                                            Hapus
+                                        </DropdownMenuItem>
+                                    </>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
                     </div>
                 </div>
 
                 {/* Summary */}
                 <div className="rounded-xl border bg-card p-5 shadow-sm">
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-                        <Figure label="Total" value={formatRupiah(piutang.price)} />
+                    <div className="grid grid-cols-2 gap-4 sm:grid-cols-4">
                         <Figure
-                            label="Sudah dibayar"
-                            value={formatRupiah(piutang.paid)}
-                            tone="text-primary"
+                            label="Total harga"
+                            value={formatRupiah(piutang.price)}
+                        />
+                        <Figure
+                            label="DP"
+                            value={formatRupiah(piutang.downPayment)}
+                        />
+                        <Figure
+                            label="Dicicil"
+                            value={formatRupiah(piutang.financed)}
                         />
                         <Figure
                             label="Sisa"
                             value={formatRupiah(piutang.remaining)}
-                            tone={piutang.remaining > 0 ? 'text-perpanjang' : undefined}
+                            tone={
+                                piutang.remaining > 0
+                                    ? 'text-perpanjang'
+                                    : undefined
+                            }
                         />
                     </div>
                     <div className="mt-4 h-2 overflow-hidden rounded-full bg-muted">
@@ -179,6 +193,13 @@ export default function PiutangShow({
                             style={{ width: `${Math.round(ratio * 100)}%` }}
                         />
                     </div>
+                    <p className="mt-2 text-xs text-muted-foreground">
+                        Sudah dibayar{' '}
+                        <span className="font-medium text-foreground tabular-nums">
+                            {formatRupiah(piutang.paid)}
+                        </span>{' '}
+                        dari {formatRupiah(piutang.financed)} yang dicicil.
+                    </p>
                 </div>
 
                 <div className="grid gap-5 lg:grid-cols-3">
@@ -516,6 +537,7 @@ function EditPiutangDialog({
         debtor_name: piutang.debtorName,
         device_name: piutang.deviceName,
         price: piutang.price,
+        down_payment: piutang.downPayment,
         date: piutang.date,
         notes: piutang.notes ?? '',
     });
@@ -525,6 +547,8 @@ function EditPiutangDialog({
             preserveScroll: true,
             onSuccess: () => onOpenChange(false),
         });
+
+    const financed = Math.max(0, form.data.price - form.data.down_payment);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -590,13 +614,57 @@ function EditPiutangDialog({
                             </div>
                         </div>
                         <div className="grid gap-1.5">
-                            <Label htmlFor="edit-tgl">Tanggal ambil</Label>
-                            <DatePicker
-                                id="edit-tgl"
-                                value={form.data.date}
-                                onChange={(v) => form.setData('date', v)}
-                            />
+                            <Label htmlFor="edit-dp">DP / uang muka</Label>
+                            <div className="relative">
+                                <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
+                                    Rp
+                                </span>
+                                <Input
+                                    id="edit-dp"
+                                    inputMode="numeric"
+                                    value={
+                                        form.data.down_payment
+                                            ? form.data.down_payment.toLocaleString(
+                                                  'id-ID',
+                                              )
+                                            : ''
+                                    }
+                                    onChange={(e) =>
+                                        form.setData(
+                                            'down_payment',
+                                            parseInt(
+                                                e.target.value.replace(
+                                                    /\D/g,
+                                                    '',
+                                                ),
+                                                10,
+                                            ) || 0,
+                                        )
+                                    }
+                                    className="pl-9 tabular-nums"
+                                />
+                            </div>
+                            {form.errors.down_payment && (
+                                <p className="text-xs text-destructive">
+                                    {form.errors.down_payment}
+                                </p>
+                            )}
                         </div>
+                    </div>
+                    <div className="grid gap-1.5">
+                        <Label htmlFor="edit-tgl">Tanggal ambil</Label>
+                        <DatePicker
+                            id="edit-tgl"
+                            value={form.data.date}
+                            onChange={(v) => form.setData('date', v)}
+                        />
+                        <p className="text-xs text-muted-foreground">
+                            Sisa dicicil:{' '}
+                            <span className="font-medium text-foreground tabular-nums">
+                                {formatRupiah(financed)}
+                            </span>
+                            . Jadwal termin (jika ada) ikut disesuaikan.
+                        </p>
                     </div>
                     <div className="grid gap-1.5">
                         <Label htmlFor="edit-catatan">Catatan</Label>
@@ -649,7 +717,7 @@ function AturTerminDialog({
 
     const count = form.data.termin_count;
     const perTermin =
-        count >= 2 ? Math.floor(piutang.price / count) : piutang.price;
+        count >= 2 ? Math.floor(piutang.financed / count) : piutang.financed;
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -657,8 +725,13 @@ function AturTerminDialog({
                 <DialogHeader>
                     <DialogTitle>Atur Termin</DialogTitle>
                     <DialogDescription>
-                        Bagi total {formatRupiah(piutang.price)} jadi beberapa
-                        termin. Jatuh tempo tiap bulan sejak tanggal ambil.
+                        Bagi sisa yang dicicil{' '}
+                        {formatRupiah(piutang.financed)}
+                        {piutang.downPayment > 0
+                            ? ` (harga ${formatRupiah(piutang.price)} − DP ${formatRupiah(piutang.downPayment)})`
+                            : ''}{' '}
+                        jadi beberapa termin. Jatuh tempo tiap bulan sejak
+                        tanggal ambil.
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-1.5">

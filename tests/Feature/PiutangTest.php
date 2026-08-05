@@ -135,6 +135,88 @@ test('the termin schedule exposes computed status on the detail page', function 
         );
 });
 
+test('a DP reduces the financed amount and termins split from it', function () {
+    $store = piutangStore();
+    $petugas = User::factory()->petugas()->create(['store_id' => $store->id]);
+
+    $this->actingAs($petugas)->post('/piutang', [
+        'debtor_name' => 'Rina',
+        'device_name' => 'HP',
+        'price' => 1_800_000,
+        'down_payment' => 300_000,
+        'date' => '2026-07-25',
+        'termin_count' => 3,
+    ])->assertRedirect();
+
+    $p = Piutang::first();
+    expect($p->down_payment)->toBe(300_000)
+        ->and($p->financed())->toBe(1_500_000)
+        ->and($p->remaining())->toBe(1_500_000) // financed, nothing paid yet
+        ->and($p->termins()->orderBy('seq')->pluck('amount')->all())
+        ->toBe([500_000, 500_000, 500_000]); // 1.5jt / 3, not 1.8jt
+});
+
+test('the DP cannot exceed the total price', function () {
+    $store = piutangStore();
+
+    $this->actingAs(User::factory()->petugas()->create(['store_id' => $store->id]))
+        ->post('/piutang', [
+            'debtor_name' => 'A', 'device_name' => 'HP',
+            'price' => 1_000_000, 'down_payment' => 1_500_000, 'date' => '2026-07-25',
+        ])->assertSessionHasErrors('down_payment');
+
+    expect(Piutang::count())->toBe(0);
+});
+
+test('a piutang is lunas once payments cover the financed amount, not the full price', function () {
+    $store = piutangStore();
+    $petugas = User::factory()->petugas()->create(['store_id' => $store->id]);
+    $p = makePiutang($store, ['price' => 1_000_000, 'down_payment' => 400_000]);
+
+    // Financed = 600.000. Paying that off marks it lunas.
+    $this->actingAs($petugas)->post("/piutang/{$p->id}/bayar", [
+        'amount' => 600_000, 'paid_at' => '2026-07-26',
+    ])->assertRedirect();
+
+    expect($p->fresh()->remaining())->toBe(0)
+        ->and($p->fresh()->status)->toBe('lunas');
+});
+
+test('petugas can edit a piutang', function () {
+    $store = piutangStore();
+    $p = makePiutang($store);
+    $petugas = User::factory()->petugas()->create(['store_id' => $store->id]);
+
+    $this->actingAs($petugas)->put("/piutang/{$p->id}", [
+        'debtor_name' => 'Nama Baru',
+        'device_name' => 'HP Baru',
+        'price' => 2_000_000,
+        'date' => $p->date->toDateString(),
+    ])->assertRedirect();
+
+    $p->refresh();
+    expect($p->debtor_name)->toBe('Nama Baru')
+        ->and($p->device_name)->toBe('HP Baru')
+        ->and($p->price)->toBe(2_000_000);
+});
+
+test('editing the price re-splits the existing termin schedule', function () {
+    $store = piutangStore();
+    $p = makePiutang($store, ['price' => 900_000]);
+    $p->generateTermins(3, $p->date); // 3 x 300.000
+
+    $this->actingAs(User::factory()->petugas()->create(['store_id' => $store->id]))
+        ->put("/piutang/{$p->id}", [
+            'debtor_name' => $p->debtor_name,
+            'device_name' => $p->device_name,
+            'price' => 1_200_000,
+            'date' => $p->date->toDateString(),
+        ])->assertRedirect();
+
+    expect($p->fresh()->termins()->orderBy('seq')->pluck('amount')->all())
+        ->toBe([400_000, 400_000, 400_000]);
+});
+
 test('only management can delete a piutang', function () {
     $store = piutangStore();
     $p = makePiutang($store);

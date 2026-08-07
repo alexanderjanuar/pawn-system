@@ -31,6 +31,37 @@ test('an overdue item can be marked for auction', function () {
     expect($tx->refresh()->status)->toBe('LELANG');
 });
 
+test('an active item can be marked as not redeemed', function () {
+    $tx = lelangTx('AKTIF');
+
+    $this->actingAs(User::factory()->create())
+        ->post("/transaksi/{$tx->code}/tidak-diambil")
+        ->assertRedirect();
+
+    expect($tx->refresh()->status)->toBe('TIDAK_DIAMBIL')
+        ->and($tx->events()->where('title', 'Ditandai tidak diambil')->count())->toBe(1);
+});
+
+test('an extended item can be marked as not redeemed', function () {
+    $tx = lelangTx('PERPANJANG');
+
+    $this->actingAs(User::factory()->create())
+        ->post("/transaksi/{$tx->code}/tidak-diambil")
+        ->assertRedirect();
+
+    expect($tx->refresh()->status)->toBe('TIDAK_DIAMBIL');
+});
+
+test('a redeemed item cannot be marked as not redeemed', function () {
+    $tx = lelangTx('DIAMBIL');
+
+    $this->actingAs(User::factory()->create())
+        ->post("/transaksi/{$tx->code}/tidak-diambil")
+        ->assertRedirect();
+
+    expect($tx->refresh()->status)->toBe('DIAMBIL');
+});
+
 test('a redeemed item cannot be marked for auction', function () {
     $tx = lelangTx('DIAMBIL');
 

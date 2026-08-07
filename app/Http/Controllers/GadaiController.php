@@ -13,6 +13,7 @@ use App\Models\Rak;
 use App\Models\Setting;
 use App\Models\Store;
 use App\Models\Transaction;
+use App\Services\Fonnte;
 use App\Support\ActiveStore;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
@@ -154,6 +155,8 @@ class GadaiController extends Controller
         );
 
         if ($needsApproval) {
+            $this->notifyOwnerNeedsApproval($transaction, $customer, $terms['principal'], $threshold, $clerk, $store);
+
             return redirect()
                 ->route('transaksi.show', $transaction)
                 ->with('success', "Transaksi {$transaction->code} menunggu persetujuan Pemilik sebelum dana dicairkan.");
@@ -423,6 +426,32 @@ class GadaiController extends Controller
         return back()->with('success', "Gadai {$transaction->code} diperpanjang s/d ".$newDue->format('d M Y').'.');
     }
 
+    public function markNotRedeemed(Request $request, Transaction $transaction): RedirectResponse
+    {
+        if (! in_array($transaction->status, ['AKTIF', 'PERPANJANG'], true)) {
+            return back()->with('error', 'Transaksi ini tidak bisa ditandai tidak diambil.');
+        }
+
+        $transaction->update(['status' => 'TIDAK_DIAMBIL']);
+
+        $transaction->events()->create([
+            'type' => 'flagged',
+            'event_date' => now(),
+            'title' => 'Ditandai tidak diambil',
+            'by' => $request->user()?->name,
+        ]);
+
+        ActivityLog::record(
+            'updated',
+            'transaction',
+            $transaction->code,
+            $transaction->customer->name,
+            'Menandai barang tidak diambil',
+        );
+
+        return back()->with('success', "Transaksi {$transaction->code} ditandai tidak diambil.");
+    }
+
     public function lelang(Request $request, Transaction $transaction): RedirectResponse
     {
         if (in_array($transaction->status, ['DIAMBIL', 'LELANG'], true)) {
@@ -516,6 +545,42 @@ class GadaiController extends Controller
     private function rupiah(int $amount): string
     {
         return 'Rp '.number_format($amount, 0, ',', '.');
+    }
+
+    /**
+     * WhatsApp the Owner when a new transaction is above the approval threshold
+     * and awaiting sign-off before funds are released.
+     */
+    private function notifyOwnerNeedsApproval(
+        Transaction $transaction,
+        Customer $customer,
+        int $principal,
+        int $threshold,
+        string $clerk,
+        ?Store $store,
+    ): void {
+        $lines = [
+            '🔔 *Perlu Persetujuan Pencairan*',
+            '',
+            "Nota: {$transaction->code}",
+            "Pelanggan: {$customer->name}",
+            "Barang: {$transaction->device_name}",
+            'Dana titipan: '.$this->rupiah($principal),
+            'Ambang batas: '.$this->rupiah($threshold),
+            "Petugas: {$clerk}",
+        ];
+
+        if ($store) {
+            $lines[] = "Toko: {$store->name}";
+        }
+
+        $lines[] = '';
+        $lines[] = 'Cek & setujui: '.route('transaksi.show', $transaction);
+
+        app(Fonnte::class)->send(
+            config('services.fonnte.owner_wa'),
+            implode("\n", $lines),
+        );
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Services\Fonnte;
 use App\Support\ActiveStore;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -19,6 +20,12 @@ class AppServiceProvider extends ServiceProvider
     {
         // Shared per-request holder for the store the request operates on.
         $this->app->singleton(ActiveStore::class);
+
+        // Fonnte WhatsApp client (token from config/services.php).
+        $this->app->bind(
+            Fonnte::class,
+            fn (): Fonnte => new Fonnte(config('services.fonnte.token')),
+        );
     }
 
     /**

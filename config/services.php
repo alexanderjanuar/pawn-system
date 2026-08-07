@@ -35,4 +35,9 @@ return [
         ],
     ],
 
+    'fonnte' => [
+        'token' => env('FONNTE_TOKEN'),
+        'owner_wa' => env('FONNTE_OWNER_WA', '081253721672'),
+    ],
+
 ];

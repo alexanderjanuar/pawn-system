@@ -1,5 +1,6 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import {
+    AlertTriangle,
     ArrowLeft,
     Boxes,
     Check,
@@ -85,8 +86,12 @@ export default function TransaksiShow({
     const [saleOpen, setSaleOpen] = useState(false);
     const [lelangOpen, setLelangOpen] = useState(false);
     const [revertOpen, setRevertOpen] = useState(false);
+    const [tidakDiambilOpen, setTidakDiambilOpen] = useState(false);
 
     const lelang = tx.status === 'LELANG';
+    const notRedeemed = tx.status === 'TIDAK_DIAMBIL';
+    // Past due and still live: prompt the owner/clerk to decide the next step.
+    const overdue = running && d <= 0;
     const saleNet = tx.saleValue != null ? tx.saleValue - tx.principal : null;
 
     const approve = () =>
@@ -108,6 +113,15 @@ export default function TransaksiShow({
             `/transaksi/${tx.id}/lelang/batal`,
             {},
             { preserveScroll: true, onSuccess: () => setRevertOpen(false) },
+        );
+    const markTidakDiambil = () =>
+        router.post(
+            `/transaksi/${tx.id}/tidak-diambil`,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: () => setTidakDiambilOpen(false),
+            },
         );
 
     return (
@@ -178,6 +192,16 @@ export default function TransaksiShow({
                                             Edit transaksi
                                         </Link>
                                     </DropdownMenuItem>
+                                    {running && !notRedeemed && (
+                                        <DropdownMenuItem
+                                            onSelect={() =>
+                                                setTidakDiambilOpen(true)
+                                            }
+                                        >
+                                            <AlertTriangle />
+                                            Tandai Tidak Diambil
+                                        </DropdownMenuItem>
+                                    )}
                                     {running && (
                                         <DropdownMenuItem
                                             onSelect={() => setLelangOpen(true)}
@@ -221,6 +245,15 @@ export default function TransaksiShow({
                         confirmLabel="Batal Lelang"
                         onConfirm={revertLelang}
                         icon={<RefreshCw />}
+                    />
+                    <ConfirmDialog
+                        open={tidakDiambilOpen}
+                        onOpenChange={setTidakDiambilOpen}
+                        title="Tandai Tidak Diambil?"
+                        description={`Barang ${tx.id} ditandai tidak diambil karena lewat jatuh tempo. Barang masih bisa ditebus, diperpanjang, atau dilanjutkan ke lelang.`}
+                        confirmLabel="Tandai Tidak Diambil"
+                        onConfirm={markTidakDiambil}
+                        icon={<AlertTriangle />}
                     />
                     <RecordSaleDialog
                         tx={tx}
@@ -275,6 +308,45 @@ export default function TransaksiShow({
                                     {tx.approvedAt ? ` · ${tx.approvedAt}` : ''}
                                     . Dana tidak dicairkan.
                                 </p>
+                            </div>
+                        </div>
+                    )}
+                    {overdue && (
+                        <div className="mt-3 flex items-start gap-2 rounded-lg border border-overdue/30 bg-overdue-soft/40 p-3 text-sm">
+                            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-overdue" />
+                            <div className="min-w-0 flex-1">
+                                <p className="font-medium">
+                                    {notRedeemed
+                                        ? 'Barang belum diambil'
+                                        : 'Sudah lewat jatuh tempo'}
+                                </p>
+                                <p className="text-muted-foreground">
+                                    {dueLabel(tx.dueDate)}.{' '}
+                                    {notRedeemed
+                                        ? 'Lanjutkan ke lelang bila barang tidak akan ditebus.'
+                                        : 'Tentukan langkah selanjutnya: tandai barang tidak diambil, atau lanjut ke lelang.'}
+                                </p>
+                                <div className="mt-3 flex flex-wrap gap-2">
+                                    {!notRedeemed && (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                setTidakDiambilOpen(true)
+                                            }
+                                        >
+                                            <AlertTriangle />
+                                            Tandai Tidak Diambil
+                                        </Button>
+                                    )}
+                                    <Button
+                                        size="sm"
+                                        onClick={() => setLelangOpen(true)}
+                                    >
+                                        <Gavel />
+                                        Tandai Lelang
+                                    </Button>
+                                </div>
                             </div>
                         </div>
                     )}

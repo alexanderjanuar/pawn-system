@@ -35,6 +35,9 @@ Route::middleware(['auth', 'active-store'])->group(function () {
         Route::delete('pengaturan/toko/{store}', [TokoController::class, 'destroy'])->name('pengaturan.toko.destroy');
     });
 
+    // Kas harian (rekonsiliasi uang masuk/keluar) — semua peran, termasuk petugas
+    Route::get('kas', [LaporanController::class, 'kas'])->name('kas');
+
     // Transaksi
     Route::get('transaksi', [TransaksiController::class, 'index'])->name('transaksi.index');
     Route::get('gadai/baru', [GadaiController::class, 'create'])->name('gadai.create');
@@ -53,6 +56,9 @@ Route::middleware(['auth', 'active-store'])->group(function () {
     // Tebus (redeem & take) + Perpanjang (extend)
     Route::post('transaksi/{transaction}/tebus', [GadaiController::class, 'redeem'])->name('transaksi.redeem');
     Route::post('transaksi/{transaction}/perpanjang', [GadaiController::class, 'extend'])->name('transaksi.extend');
+
+    // Pengingat WhatsApp ke pelanggan
+    Route::post('transaksi/{transaction}/ingatkan', [GadaiController::class, 'remind'])->name('transaksi.remind');
 
     // Tidak diambil (wanprestasi) + Lelang
     Route::post('transaksi/{transaction}/tidak-diambil', [GadaiController::class, 'markNotRedeemed'])->name('transaksi.tidak-diambil');

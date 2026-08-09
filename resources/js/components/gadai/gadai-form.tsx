@@ -21,6 +21,7 @@ import { CustomerCombobox } from '@/components/gadai/customer-combobox';
 import { DatePicker } from '@/components/gadai/date-picker';
 import { FileDropzone } from '@/components/gadai/file-dropzone';
 import { PageHeader } from '@/components/gadai/page-header';
+import { PatternLock } from '@/components/gadai/pattern-lock';
 import { PhotoUploader } from '@/components/gadai/photo-uploader';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
@@ -40,6 +41,7 @@ import { computeFee, PHOTO_LABELS, STATUS_META, STATUS_ORDER } from '@/lib/gadai
 import { cn, initials } from '@/lib/utils';
 import type {
     Customer,
+    DeviceLockType,
     GadaiStatus,
     Kelengkapan,
     Transaction,
@@ -138,6 +140,9 @@ export function GadaiForm({
         device_serial: transaction?.device.serial ?? '',
         imei_1: transaction?.device.imei1 ?? '',
         imei_2: transaction?.device.imei2 ?? '',
+        device_lock_type: (transaction?.device.lockType ??
+            'none') as DeviceLockType,
+        device_lock_value: transaction?.device.lockValue ?? '',
         kelengkapan: (transaction?.device.kelengkapan ??
             'HP + Box + Charger') as Kelengkapan,
         status: transaction?.status ?? 'AKTIF',
@@ -720,6 +725,101 @@ export function GadaiForm({
                                             </ToggleGroupItem>
                                         ))}
                                     </ToggleGroup>
+                                </Field>
+                                <Field
+                                    label="Kunci HP"
+                                    className="sm:col-span-2"
+                                    hint={
+                                        errors.device_lock_value ??
+                                        'Untuk membuka HP saat pengecekan atau saat masuk lelang.'
+                                    }
+                                >
+                                    <div className="grid gap-3">
+                                        <ToggleGroup
+                                            type="single"
+                                            variant="outline"
+                                            value={data.device_lock_type}
+                                            onValueChange={(v) =>
+                                                v &&
+                                                setData((prev) => ({
+                                                    ...prev,
+                                                    device_lock_type:
+                                                        v as DeviceLockType,
+                                                    device_lock_value: '',
+                                                }))
+                                            }
+                                            className="flex-wrap justify-start"
+                                        >
+                                            <ToggleGroupItem
+                                                value="none"
+                                                className="px-3.5"
+                                            >
+                                                Tidak Ada
+                                            </ToggleGroupItem>
+                                            <ToggleGroupItem
+                                                value="pin"
+                                                className="px-3.5"
+                                            >
+                                                PIN
+                                            </ToggleGroupItem>
+                                            <ToggleGroupItem
+                                                value="password"
+                                                className="px-3.5"
+                                            >
+                                                Kata Sandi
+                                            </ToggleGroupItem>
+                                            <ToggleGroupItem
+                                                value="pattern"
+                                                className="px-3.5"
+                                            >
+                                                Pola
+                                            </ToggleGroupItem>
+                                        </ToggleGroup>
+
+                                        {data.device_lock_type === 'pin' && (
+                                            <Input
+                                                inputMode="numeric"
+                                                value={data.device_lock_value}
+                                                onChange={(e) =>
+                                                    setData(
+                                                        'device_lock_value',
+                                                        e.target.value.replace(
+                                                            /\D/g,
+                                                            '',
+                                                        ),
+                                                    )
+                                                }
+                                                placeholder="cth. 1234"
+                                                className="max-w-xs tabular-nums"
+                                            />
+                                        )}
+                                        {data.device_lock_type ===
+                                            'password' && (
+                                            <Input
+                                                value={data.device_lock_value}
+                                                onChange={(e) =>
+                                                    setData(
+                                                        'device_lock_value',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                placeholder="Kata sandi HP"
+                                                className="max-w-xs"
+                                            />
+                                        )}
+                                        {data.device_lock_type ===
+                                            'pattern' && (
+                                            <PatternLock
+                                                value={data.device_lock_value}
+                                                onChange={(v) =>
+                                                    setData(
+                                                        'device_lock_value',
+                                                        v,
+                                                    )
+                                                }
+                                            />
+                                        )}
+                                    </div>
                                 </Field>
                             </div>
                         </SectionCard>

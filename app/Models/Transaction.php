@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Support\ActiveStore;
 use Carbon\CarbonInterface;
+use Database\Factories\TransactionFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
@@ -26,6 +27,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $device_serial
  * @property string|null $imei_1
  * @property string|null $imei_2
+ * @property string $device_lock_type
+ * @property string|null $device_lock_value
  * @property string $kelengkapan
  * @property int $principal
  * @property int $tenor_days
@@ -45,7 +48,8 @@ use Illuminate\Support\Carbon;
 #[Fillable([
     'store_id', 'rak_id',
     'code', 'customer_id', 'device_owner', 'device_name', 'device_ram',
-    'device_storage', 'device_serial', 'imei_1', 'imei_2', 'kelengkapan', 'principal', 'tenor_days',
+    'device_storage', 'device_serial', 'imei_1', 'imei_2', 'device_lock_type', 'device_lock_value',
+    'kelengkapan', 'principal', 'tenor_days',
     'fee_percent', 'fee', 'start_date', 'due_date', 'status', 'clerk', 'notes',
     'extensions', 'photos', 'ktp_path',
     'approval_status', 'approved_by', 'approved_at',
@@ -53,7 +57,7 @@ use Illuminate\Support\Carbon;
 ])]
 class Transaction extends Model
 {
-    /** @use HasFactory<\Database\Factories\TransactionFactory> */
+    /** @use HasFactory<TransactionFactory> */
     use HasFactory;
 
     /** Loans strictly above this amount need Owner approval before disbursal. */

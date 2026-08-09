@@ -37,6 +37,11 @@ class StoreGadaiRequest extends FormRequest
             'device_serial' => ['nullable', 'string', 'max:60'],
             'imei_1' => ['nullable', 'string', 'max:30'],
             'imei_2' => ['nullable', 'string', 'max:30'],
+            'device_lock_type' => ['nullable', 'in:none,pin,password,pattern'],
+            'device_lock_value' => [
+                'nullable', 'string', 'max:100',
+                Rule::requiredIf(fn (): bool => $this->input('device_lock_type', 'none') !== 'none'),
+            ],
             'kelengkapan' => ['required', 'in:HP saja,HP + Box,HP + Charger,HP + Box + Charger'],
 
             'clerk' => ['nullable', 'string', 'max:120'],
@@ -80,6 +85,7 @@ class StoreGadaiRequest extends FormRequest
             'customer_code.required_if' => 'Pilih pelanggan lama terlebih dahulu.',
             'name.required_if' => 'Nama pelanggan wajib diisi.',
             'phone.required_if' => 'Nomor HP wajib diisi.',
+            'device_lock_value.required' => 'Isi kunci HP sesuai jenis yang dipilih.',
             'device_name.required' => 'Nama HP wajib diisi.',
             'principal.min' => 'Dana titipan harus lebih dari 0.',
         ];

@@ -120,6 +120,7 @@ class GadaiController extends Controller
             'device_serial' => $data['device_serial'] ?? null,
             'imei_1' => $data['imei_1'] ?? null,
             'imei_2' => $data['imei_2'] ?? null,
+            ...$this->deviceLock($data),
             'kelengkapan' => $data['kelengkapan'],
             'principal' => $terms['principal'],
             'tenor_days' => $terms['days'],
@@ -267,6 +268,7 @@ class GadaiController extends Controller
             'device_serial' => $data['device_serial'] ?? null,
             'imei_1' => $data['imei_1'] ?? null,
             'imei_2' => $data['imei_2'] ?? null,
+            ...$this->deviceLock($data),
             'kelengkapan' => $data['kelengkapan'],
             'status' => $data['status'],
             'clerk' => $clerk,
@@ -382,6 +384,10 @@ class GadaiController extends Controller
             'mode' => ['required', 'in:15,30,custom'],
             'until' => ['required_if:mode,custom', 'nullable', 'date', 'after:'.$transaction->due_date->toDateString()],
             'fee' => ['required_if:mode,custom', 'nullable', 'integer', 'min:0'],
+            // The customer must pay the deposit fee (interest) up front to extend.
+            'fee_paid' => ['accepted'],
+        ], [
+            'fee_paid.accepted' => 'Pastikan pelanggan sudah membayar biaya titipan sebelum memperpanjang.',
         ]);
 
         $principal = $transaction->principal;
@@ -392,8 +398,10 @@ class GadaiController extends Controller
             $fee = (int) ($data['fee'] ?? 0);
             $percent = $principal > 0 ? (int) round($fee / $principal * 100) : 0;
         } else {
+            // The extension fee follows the transaction's own interest rate,
+            // not the extension length: 15 and 30 days both cost that rate.
             $days = (int) $data['mode'];
-            $percent = $days === 15 ? 10 : 15;
+            $percent = $transaction->fee_percent;
             $newDue = $currentDue->copy()->addDays($days);
             $fee = (int) round($principal * $percent / 100);
         }
@@ -411,6 +419,7 @@ class GadaiController extends Controller
             'type' => 'extended',
             'event_date' => now(),
             'title' => 'Diperpanjang s/d '.$newDue->format('d M Y'),
+            'note' => 'Biaya titipan '.$this->rupiah($fee).' dibayar.',
             'by' => $request->user()?->name,
             'amount' => $fee,
         ]);
@@ -424,6 +433,40 @@ class GadaiController extends Controller
         );
 
         return back()->with('success', "Gadai {$transaction->code} diperpanjang s/d ".$newDue->format('d M Y').'.');
+    }
+
+    public function remind(Request $request, Transaction $transaction): RedirectResponse
+    {
+        $data = $request->validate([
+            'message' => ['required', 'string', 'max:2000'],
+        ]);
+
+        $phone = $transaction->customer->phone;
+
+        if (blank($phone)) {
+            return back()->with('error', 'Pelanggan belum memiliki nomor WhatsApp.');
+        }
+
+        if (! app(Fonnte::class)->send($phone, $data['message'])) {
+            return back()->with('error', 'Pengingat gagal dikirim. Periksa koneksi atau pengaturan WhatsApp.');
+        }
+
+        $transaction->events()->create([
+            'type' => 'reminder',
+            'event_date' => now(),
+            'title' => 'Pengingat WhatsApp dikirim',
+            'by' => $request->user()?->name,
+        ]);
+
+        ActivityLog::record(
+            'updated',
+            'transaction',
+            $transaction->code,
+            $transaction->customer->name,
+            'Mengirim pengingat WhatsApp',
+        );
+
+        return back()->with('success', "Pengingat terkirim ke {$transaction->customer->name}.");
     }
 
     public function markNotRedeemed(Request $request, Transaction $transaction): RedirectResponse
@@ -545,6 +588,22 @@ class GadaiController extends Controller
     private function rupiah(int $amount): string
     {
         return 'Rp '.number_format($amount, 0, ',', '.');
+    }
+
+    /**
+     * Normalise the phone-lock fields: no value is kept when the type is "none".
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{device_lock_type: string, device_lock_value: string|null}
+     */
+    private function deviceLock(array $data): array
+    {
+        $type = $data['device_lock_type'] ?? 'none';
+
+        return [
+            'device_lock_type' => $type,
+            'device_lock_value' => $type === 'none' ? null : ($data['device_lock_value'] ?? null),
+        ];
     }
 
     /**

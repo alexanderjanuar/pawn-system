@@ -35,7 +35,7 @@ class TransactionResource extends JsonResource
             ],
             'customerCode' => $this->customer->code,
             'deviceOwner' => $this->device_owner,
-            'device' => [
+            'device' => array_merge([
                 'name' => $this->device_name,
                 'ram' => $this->device_ram,
                 'storage' => $this->device_storage,
@@ -43,7 +43,12 @@ class TransactionResource extends JsonResource
                 'imei1' => $this->imei_1,
                 'imei2' => $this->imei_2,
                 'kelengkapan' => $this->kelengkapan,
-            ],
+            ], $request->user() !== null ? [
+                // The phone-unlock secret is staff-only; never expose it on the
+                // public status page.
+                'lockType' => $this->device_lock_type ?? 'none',
+                'lockValue' => $this->device_lock_value,
+            ] : []),
             'principal' => $this->principal,
             'tenorDays' => $this->tenor_days,
             'feePercent' => $this->fee_percent,
@@ -51,6 +56,11 @@ class TransactionResource extends JsonResource
             'saleValue' => $this->sale_value,
             'soldAt' => $this->sold_at?->format('Y-m-d'),
             'startDate' => $this->start_date->format('Y-m-d'),
+            // On the printed nota, an extended pawn shows the start of its
+            // current period (the previous due date), not the original entry.
+            'notaStartDate' => ($this->extensions > 0
+                ? $this->due_date->copy()->subDays($this->tenor_days)
+                : $this->start_date)->format('Y-m-d'),
             'dueDate' => $this->due_date->format('Y-m-d'),
             'createdAt' => $this->created_at?->toIso8601String(),
             'clerk' => $this->clerk,

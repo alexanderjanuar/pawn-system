@@ -26,12 +26,14 @@ import type { FormEvent, ReactNode } from 'react';
 import { DatePicker } from '@/components/gadai/date-picker';
 import { ImageLightbox } from '@/components/gadai/image-lightbox';
 import { PageHeader } from '@/components/gadai/page-header';
+import { PatternLock } from '@/components/gadai/pattern-lock';
 import { QrLightbox } from '@/components/gadai/qr-lightbox';
 import { Timeline } from '@/components/gadai/timeline';
 import { TransactionQr } from '@/components/gadai/transaction-qr';
 import { PetugasLink } from '@/components/petugas-link';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import {
     Dialog,
     DialogClose,
@@ -513,6 +515,36 @@ export default function TransaksiShow({
                                     label="Pemilik Device"
                                     value={tx.deviceOwner}
                                 />
+                                {tx.device.lockType === 'none' ||
+                                !tx.device.lockValue ? (
+                                    <Spec label="Kunci HP" value="Tidak ada" />
+                                ) : tx.device.lockType === 'pattern' ? (
+                                    <div className="grid gap-1.5 sm:col-span-2">
+                                        <span className="text-xs text-muted-foreground">
+                                            Kunci HP · Pola
+                                        </span>
+                                        <PatternLock
+                                            value={tx.device.lockValue}
+                                            size={140}
+                                        />
+                                        <span className="text-xs text-muted-foreground">
+                                            Urutan:{' '}
+                                            {tx.device.lockValue
+                                                .split('-')
+                                                .join(' → ')}
+                                        </span>
+                                    </div>
+                                ) : (
+                                    <Spec
+                                        label={
+                                            tx.device.lockType === 'pin'
+                                                ? 'Kunci HP · PIN'
+                                                : 'Kunci HP · Kata Sandi'
+                                        }
+                                        value={tx.device.lockValue}
+                                        mono
+                                    />
+                                )}
                             </div>
 
                             {(tx.photos?.length ?? 0) > 0 || tx.ktp ? (
@@ -810,11 +842,15 @@ function DeleteTransactionDialog({
 
 function PerpanjangDialog({ tx }: { tx: Transaction }) {
     const [open, setOpen] = useState(false);
+    // The extension fee follows this transaction's own interest rate, the same
+    // for 15 or 30 days. Custom still lets the clerk set a one-off amount.
+    const presetFee = computeFee(tx.principal, tx.feePercent);
     const { data, setData, post, processing, errors, reset, clearErrors } =
         useForm({
             mode: '15' as '15' | '30' | 'custom',
             until: addDays(tx.dueDate, 15),
-            fee: computeFee(tx.principal, 10),
+            fee: presetFee,
+            fee_paid: false,
         });
 
     const newDue =
@@ -823,12 +859,7 @@ function PerpanjangDialog({ tx }: { tx: Transaction }) {
             : data.mode === '30'
               ? addDays(tx.dueDate, 30)
               : data.until;
-    const fee =
-        data.mode === '15'
-            ? computeFee(tx.principal, 10)
-            : data.mode === '30'
-              ? computeFee(tx.principal, 15)
-              : Math.max(0, data.fee || 0);
+    const fee = data.mode === 'custom' ? Math.max(0, data.fee || 0) : presetFee;
 
     const submit = () =>
         post(`/transaksi/${tx.id}/perpanjang`, {
@@ -883,7 +914,7 @@ function PerpanjangDialog({ tx }: { tx: Transaction }) {
                         >
                             <span className="font-medium">15 Hari</span>
                             <span className="text-xs text-muted-foreground">
-                                biaya 10%
+                                biaya {tx.feePercent}%
                             </span>
                         </ToggleGroupItem>
                         <ToggleGroupItem
@@ -892,7 +923,7 @@ function PerpanjangDialog({ tx }: { tx: Transaction }) {
                         >
                             <span className="font-medium">30 Hari</span>
                             <span className="text-xs text-muted-foreground">
-                                biaya 15%
+                                biaya {tx.feePercent}%
                             </span>
                         </ToggleGroupItem>
                         <ToggleGroupItem
@@ -963,7 +994,7 @@ function PerpanjangDialog({ tx }: { tx: Transaction }) {
 
                 <dl className="space-y-2 rounded-lg border bg-muted/30 p-4 text-sm">
                     <Row
-                        label="Biaya titipan dibayar"
+                        label="Biaya titipan (bunga)"
                         value={formatRupiah(fee)}
                         strong
                     />
@@ -977,11 +1008,35 @@ function PerpanjangDialog({ tx }: { tx: Transaction }) {
                         strong
                     />
                 </dl>
+
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-sm">
+                    <Checkbox
+                        checked={data.fee_paid}
+                        onCheckedChange={(v) => setData('fee_paid', v === true)}
+                        className="mt-0.5 size-5 border-2 border-muted-foreground/60"
+                    />
+                    <span>
+                        Pelanggan sudah membayar biaya titipan{' '}
+                        <span className="font-semibold">
+                            {formatRupiah(fee)}
+                        </span>
+                        . Perpanjangan hanya diproses setelah biaya dibayar.
+                    </span>
+                </label>
+                {errors.fee_paid && (
+                    <p className="-mt-1 text-xs text-destructive">
+                        {errors.fee_paid}
+                    </p>
+                )}
+
                 <DialogFooter>
                     <DialogClose asChild>
                         <Button variant="outline">Batal</Button>
                     </DialogClose>
-                    <Button onClick={submit} disabled={processing}>
+                    <Button
+                        onClick={submit}
+                        disabled={processing || !data.fee_paid}
+                    >
                         <RefreshCw />
                         Konfirmasi Perpanjang
                     </Button>

@@ -1,8 +1,8 @@
 import { Head, Link } from '@inertiajs/react';
 import { AlertTriangle, CalendarClock, CalendarDays, Send } from 'lucide-react';
 import { useMemo } from 'react';
-import { toast } from 'sonner';
 import { PageHeader } from '@/components/gadai/page-header';
+import { ReminderDialog } from '@/components/gadai/reminder-dialog';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import { daysUntil, dueLabel, formatDate, formatRupiah } from '@/lib/format';
@@ -96,22 +96,7 @@ export default function JatuhTempo({
                 <PageHeader
                     title="Jatuh Tempo"
                     description={`${perluTindak} barang perlu ditindak hari ini atau sudah terlambat.`}
-                >
-                    <Button
-                        variant="outline"
-                        onClick={() =>
-                            toast.success(
-                                'Pengingat WhatsApp terkirim (preview)',
-                                {
-                                    description: `Terkirim ke ${perluTindak} pelanggan yang jatuh tempo & terlambat.`,
-                                },
-                            )
-                        }
-                    >
-                        <Send />
-                        Ingatkan Semua
-                    </Button>
-                </PageHeader>
+                />
 
                 <div className="flex flex-col gap-5">
                     {groups.map((group) => (
@@ -191,18 +176,15 @@ function DueItem({ tx }: { tx: Transaction }) {
             </div>
 
             <div className="flex items-center gap-1">
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    title="Kirim pengingat WhatsApp"
-                    onClick={() =>
-                        toast.success('Pengingat terkirim (preview)', {
-                            description: `Ke ${tx.customer.name} · ${tx.customer.phone}`,
-                        })
-                    }
-                >
-                    <Send />
-                </Button>
+                <ReminderDialog tx={tx}>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        title="Kirim pengingat WhatsApp"
+                    >
+                        <Send />
+                    </Button>
+                </ReminderDialog>
                 <Button variant="outline" size="sm" asChild>
                     <Link href={`/transaksi/${tx.id}`}>Detail</Link>
                 </Button>

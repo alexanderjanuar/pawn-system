@@ -13,6 +13,7 @@ import {
     Store,
     UserCog,
     Users,
+    Wallet,
 } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
 import { NavMain } from '@/components/nav-main';
@@ -55,6 +56,7 @@ export function AppSidebar() {
     // Operational items every role sees.
     const operationalNavItems: NavItem[] = [
         { title: 'Transaksi', href: '/transaksi', icon: Receipt },
+        { title: 'Kas Harian', href: '/kas', icon: Wallet },
         { title: 'Pelanggan', href: '/pelanggan', icon: Users },
         { title: 'Piutang', href: '/piutang', icon: HandCoins },
         { title: 'Rak', href: '/rak', icon: Boxes },

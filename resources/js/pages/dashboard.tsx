@@ -15,8 +15,8 @@ import {
     X,
 } from 'lucide-react';
 import { useMemo } from 'react';
-import { toast } from 'sonner';
 import { PageHeader } from '@/components/gadai/page-header';
+import { ReminderDialog } from '@/components/gadai/reminder-dialog';
 import { PetugasLink } from '@/components/petugas-link';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
@@ -118,19 +118,16 @@ function DueRow({ t }: { t: Transaction }) {
                         </span>
                     </div>
 
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        title="Kirim pengingat WhatsApp"
-                        className="relative z-20 size-8 shrink-0 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
-                        onClick={() =>
-                            toast.success('Pengingat terkirim (preview)', {
-                                description: `Ke ${t.customer.name} · ${t.customer.phone}`,
-                            })
-                        }
-                    >
-                        <Send className="size-4" />
-                    </Button>
+                    <ReminderDialog tx={t}>
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            title="Kirim pengingat WhatsApp"
+                            className="relative z-20 size-8 shrink-0 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:focus-visible:opacity-100"
+                        >
+                            <Send className="size-4" />
+                        </Button>
+                    </ReminderDialog>
                     <ChevronRight className="hidden size-4 shrink-0 text-muted-foreground/40 transition-transform group-hover:translate-x-0.5 group-hover:text-muted-foreground sm:block" />
                 </div>
             </div>

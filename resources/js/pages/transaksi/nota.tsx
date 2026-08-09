@@ -182,7 +182,7 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
                 <Row
                     half={half}
                     label="Tanggal Masuk"
-                    value={formatDate(tx.startDate)}
+                    value={formatDate(tx.notaStartDate)}
                 />
                 <Row half={half} label="Nama Pelanggan" value={tx.customer.name} />
                 <Row

@@ -1,6 +1,7 @@
 <?php
 
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 /*
@@ -16,6 +17,12 @@ use Tests\TestCase;
 
 pest()->extend(TestCase::class)
     ->use(RefreshDatabase::class)
+    ->beforeEach(function () {
+        // Safety net: never let a test reach the real Fonnte WhatsApp gateway,
+        // even if a test forgets to fake it. Other hosts (e.g. Inertia SSR)
+        // are left untouched and execute as normal.
+        Http::fake(['api.fonnte.com/*' => Http::response(['status' => true])]);
+    })
     ->in('Feature');
 
 /*

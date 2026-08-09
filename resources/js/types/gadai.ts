@@ -38,6 +38,8 @@ export type Customer = CustomerContact & {
     transactions?: CustomerHistoryEntry[];
 };
 
+export type DeviceLockType = 'none' | 'pin' | 'password' | 'pattern';
+
 export type Device = {
     name: string;
     ram: string;
@@ -45,6 +47,8 @@ export type Device = {
     serial: string; // nomor seri
     imei1: string | null;
     imei2: string | null;
+    lockType: DeviceLockType; // cara buka HP
+    lockValue: string | null; // PIN / kata sandi / urutan pola "1-2-3"
     kelengkapan: Kelengkapan;
 };
 
@@ -125,6 +129,7 @@ export type Transaction = {
     saleValue?: number | null; // nilai jual lelang
     soldAt?: string | null; // tanggal terjual lelang
     startDate: string; // ISO tanggal masuk
+    notaStartDate: string; // ISO tanggal masuk untuk nota (awal periode perpanjangan)
     dueDate: string; // ISO
     createdAt?: string; // ISO timestamp pembuatan transaksi
     clerk: string; // petugas yang menangani

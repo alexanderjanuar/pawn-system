@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Http\Resources\TransactionResource;
 use App\Models\Transaction;
+use App\Models\TransactionEvent;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -24,6 +25,27 @@ class LaporanController extends Controller
             'trend' => $this->feeTrend(),
             'dailyTrend' => $this->dailyTrend(),
             'overview' => $this->overview(),
+            'cashFlow' => $this->cashFlow($from, $to),
+        ]);
+    }
+
+    /**
+     * Daily cash reconciliation, open to petugas (unlike the full report).
+     * Defaults to today so a clerk can match the drawer at end of shift.
+     */
+    public function kas(Request $request): Response
+    {
+        if ($request->has('from') || $request->has('to')) {
+            $from = (string) $request->query('from', '');
+            $to = (string) $request->query('to', '');
+        } else {
+            $from = now()->toDateString();
+            $to = now()->toDateString();
+        }
+
+        return Inertia::render('kas', [
+            'period' => ['from' => $from, 'to' => $to],
+            'cashFlow' => $this->cashFlow($from, $to),
         ]);
     }
 
@@ -214,6 +236,85 @@ class LaporanController extends Controller
                 ->whereDate('due_date', '<=', $ref)
                 ->count(),
             'lelang' => Transaction::query()->forActiveStore()->where('status', 'LELANG')->count(),
+        ];
+    }
+
+    /**
+     * Cash movements within the period, for reconciling the system against the
+     * physical drawer. Money IN: redeem (dana + biaya), extension fee, auction
+     * sale. Money OUT: disbursed principal of approved new pawns. Each movement
+     * is listed individually so the clerk can tick it off against real cash.
+     *
+     * @return array{
+     *     in: array{tebus: int, perpanjang: int, lelang: int, total: int},
+     *     out: array{pencairan: int, total: int},
+     *     net: int,
+     *     entries: array<int, array{id: int, code: string, customer: string, kind: string, direction: string, amount: int, date: string, time: string|null, clerk: string}>
+     * }
+     */
+    private function cashFlow(string $from, string $to): array
+    {
+        $events = TransactionEvent::query()
+            ->with('transaction.customer')
+            ->whereHas('transaction', fn ($q) => $q->forActiveStore())
+            ->whereIn('type', ['created', 'redeemed', 'extended', 'auctioned'])
+            ->when($from !== '', fn ($q) => $q->whereDate('event_date', '>=', $from))
+            ->when($to !== '', fn ($q) => $q->whereDate('event_date', '<=', $to))
+            ->orderByDesc('event_date')
+            ->orderByDesc('id')
+            ->get();
+
+        $in = ['tebus' => 0, 'perpanjang' => 0, 'lelang' => 0, 'total' => 0];
+        $out = ['pencairan' => 0, 'total' => 0];
+        $entries = [];
+
+        foreach ($events as $event) {
+            $transaction = $event->transaction;
+
+            if ($transaction === null) {
+                continue;
+            }
+
+            $amount = (int) ($event->amount ?? 0);
+
+            [$direction, $kind] = match ($event->type) {
+                'redeemed' => ['in', 'tebus'],
+                'extended' => ['in', 'perpanjang'],
+                'auctioned' => $amount > 0 ? ['in', 'lelang'] : [null, null],
+                'created' => $transaction->approval_status === 'approved' ? ['out', 'pencairan'] : [null, null],
+                default => [null, null],
+            };
+
+            if ($direction === null || $amount <= 0) {
+                continue;
+            }
+
+            if ($direction === 'in') {
+                $in[$kind] += $amount;
+                $in['total'] += $amount;
+            } else {
+                $out[$kind] += $amount;
+                $out['total'] += $amount;
+            }
+
+            $entries[] = [
+                'id' => $event->id,
+                'code' => $transaction->code,
+                'customer' => $transaction->customer?->name ?? '—',
+                'kind' => $kind,
+                'direction' => $direction,
+                'amount' => $amount,
+                'date' => $event->event_date->format('Y-m-d'),
+                'time' => $event->created_at?->format('H.i'),
+                'clerk' => $event->by ?: $transaction->clerk,
+            ];
+        }
+
+        return [
+            'in' => $in,
+            'out' => $out,
+            'net' => $in['total'] - $out['total'],
+            'entries' => $entries,
         ];
     }
 }

@@ -34,6 +34,11 @@ class UpdateGadaiRequest extends FormRequest
             'device_serial' => ['nullable', 'string', 'max:60'],
             'imei_1' => ['nullable', 'string', 'max:30'],
             'imei_2' => ['nullable', 'string', 'max:30'],
+            'device_lock_type' => ['nullable', 'in:none,pin,password,pattern'],
+            'device_lock_value' => [
+                'nullable', 'string', 'max:100',
+                Rule::requiredIf(fn (): bool => $this->input('device_lock_type', 'none') !== 'none'),
+            ],
             'kelengkapan' => ['required', 'in:HP saja,HP + Box,HP + Charger,HP + Box + Charger'],
 
             'status' => ['required', 'in:AKTIF,PERPANJANG,DIAMBIL,TIDAK_DIAMBIL,LELANG'],
@@ -71,6 +76,7 @@ class UpdateGadaiRequest extends FormRequest
     {
         return [
             'device_name.required' => 'Nama HP wajib diisi.',
+            'device_lock_value.required' => 'Isi kunci HP sesuai jenis yang dipilih.',
             'principal.min' => 'Dana titipan harus lebih dari 0.',
         ];
     }

@@ -30,7 +30,12 @@ export function ReminderDialog({
     children: ReactNode;
 }) {
     const props = usePage().props;
-    const shopName = props.activeStoreName ?? props.name ?? 'Gulam Cell';
+    // Use the specific store's name when one is selected; otherwise (the "Semua
+    // Toko" overview, or single-shop) default to the shop name for the message.
+    const shopName =
+        props.activeStoreName && props.activeStoreName !== 'Semua Toko'
+            ? props.activeStoreName
+            : 'Gulam Cell';
     const [open, setOpen] = useState(false);
     const { data, setData, post, processing, reset } = useForm({
         message: buildReminderMessage(tx, shopName),

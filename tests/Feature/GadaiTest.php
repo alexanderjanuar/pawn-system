@@ -11,6 +11,26 @@ test('guests cannot create a gadai', function () {
     $this->post('/gadai', [])->assertRedirect(route('login'));
 });
 
+test('a gadai accepts free-text kelengkapan for non-phone items', function () {
+    $user = User::factory()->create();
+    $customer = Customer::create([
+        'code' => 'PLG-009', 'name' => 'Joko', 'phone' => '081', 'join_date' => '2026-07-01',
+    ]);
+
+    $this->actingAs($user)->post('/gadai', [
+        'code_mode' => 'auto',
+        'customer_mode' => 'existing',
+        'customer_code' => $customer->code,
+        'device_name' => 'Honda Vario 2021',
+        'kelengkapan' => 'Motor + STNK + BPKB',
+        'principal' => 3_000_000,
+        'tenor_choice' => '15',
+        'start_date' => '2026-08-05',
+    ])->assertRedirect();
+
+    expect(Transaction::first()->kelengkapan)->toBe('Motor + STNK + BPKB');
+});
+
 test('a gadai can be created for an existing customer with photos', function () {
     Storage::fake('public');
     $user = User::factory()->create(['name' => 'Rina']);

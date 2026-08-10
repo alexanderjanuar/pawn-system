@@ -114,13 +114,7 @@ class GadaiController extends Controller
             'rak_id' => $data['rak_id'] ?? null,
             'code' => $data['code'] ?? Transaction::nextCode($store, $startDate),
             'device_owner' => ($data['device_owner'] ?? '') ?: $customer->name,
-            'device_name' => $data['device_name'],
-            'device_ram' => $data['device_ram'] ?? null,
-            'device_storage' => $data['device_storage'] ?? null,
-            'device_serial' => $data['device_serial'] ?? null,
-            'imei_1' => $data['imei_1'] ?? null,
-            'imei_2' => $data['imei_2'] ?? null,
-            ...$this->deviceLock($data),
+            ...$this->deviceAttributes($data),
             'kelengkapan' => $data['kelengkapan'],
             'principal' => $terms['principal'],
             'tenor_days' => $terms['days'],
@@ -262,13 +256,7 @@ class GadaiController extends Controller
         $transaction->update([
             'customer_id' => $customer->id,
             'device_owner' => ($data['device_owner'] ?? '') ?: $customer->name,
-            'device_name' => $data['device_name'],
-            'device_ram' => $data['device_ram'] ?? null,
-            'device_storage' => $data['device_storage'] ?? null,
-            'device_serial' => $data['device_serial'] ?? null,
-            'imei_1' => $data['imei_1'] ?? null,
-            'imei_2' => $data['imei_2'] ?? null,
-            ...$this->deviceLock($data),
+            ...$this->deviceAttributes($data),
             'kelengkapan' => $data['kelengkapan'],
             'status' => $data['status'],
             'clerk' => $clerk,
@@ -353,6 +341,10 @@ class GadaiController extends Controller
             return back()->with('error', 'Transaksi ini tidak bisa ditebus.');
         }
 
+        $data = $request->validate([
+            'payment_method' => ['nullable', 'in:cash,transfer'],
+        ]);
+
         $transaction->update(['status' => 'DIAMBIL']);
 
         $transaction->events()->create([
@@ -361,6 +353,7 @@ class GadaiController extends Controller
             'title' => 'Ditebus & diambil',
             'by' => $request->user()?->name,
             'amount' => $transaction->principal + $transaction->fee,
+            'payment_method' => $data['payment_method'] ?? 'cash',
         ]);
 
         ActivityLog::record(
@@ -386,6 +379,7 @@ class GadaiController extends Controller
             'fee' => ['required_if:mode,custom', 'nullable', 'integer', 'min:0'],
             // The customer must pay the deposit fee (interest) up front to extend.
             'fee_paid' => ['accepted'],
+            'payment_method' => ['nullable', 'in:cash,transfer'],
         ], [
             'fee_paid.accepted' => 'Pastikan pelanggan sudah membayar biaya titipan sebelum memperpanjang.',
         ]);
@@ -422,6 +416,7 @@ class GadaiController extends Controller
             'note' => 'Biaya titipan '.$this->rupiah($fee).' dibayar.',
             'by' => $request->user()?->name,
             'amount' => $fee,
+            'payment_method' => $data['payment_method'] ?? 'cash',
         ]);
 
         ActivityLog::record(
@@ -572,6 +567,7 @@ class GadaiController extends Controller
             'title' => 'Terjual lelang',
             'by' => $request->user()?->name,
             'amount' => $data['sale_value'],
+            'payment_method' => 'cash',
         ]);
 
         ActivityLog::record(
@@ -603,6 +599,39 @@ class GadaiController extends Controller
         return [
             'device_lock_type' => $type,
             'device_lock_value' => $type === 'none' ? null : ($data['device_lock_value'] ?? null),
+        ];
+    }
+
+    /**
+     * Device columns normalised for the chosen item type, so fields that do not
+     * apply (e.g. IMEI on a motor) are never persisted from a switched form.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function deviceAttributes(array $data): array
+    {
+        $type = $data['device_type'] ?? 'hp';
+        $hasSpecs = in_array($type, ['hp', 'laptop'], true); // ram/storage/serial/lock
+        $isHp = $type === 'hp';
+        $isMotor = $type === 'motor';
+        $lock = $this->deviceLock($data);
+
+        return [
+            'device_type' => $type,
+            'device_name' => $data['device_name'],
+            'device_ram' => $hasSpecs ? ($data['device_ram'] ?? null) : null,
+            'device_storage' => $hasSpecs ? ($data['device_storage'] ?? null) : null,
+            'device_serial' => $hasSpecs ? ($data['device_serial'] ?? null) : null,
+            'imei_1' => $isHp ? ($data['imei_1'] ?? null) : null,
+            'imei_2' => $isHp ? ($data['imei_2'] ?? null) : null,
+            'device_lock_type' => $hasSpecs ? $lock['device_lock_type'] : 'none',
+            'device_lock_value' => $hasSpecs ? $lock['device_lock_value'] : null,
+            'plat_nomor' => $isMotor ? ($data['plat_nomor'] ?? null) : null,
+            'no_rangka' => $isMotor ? ($data['no_rangka'] ?? null) : null,
+            'no_mesin' => $isMotor ? ($data['no_mesin'] ?? null) : null,
+            'warna' => $isMotor ? ($data['warna'] ?? null) : null,
+            'tahun' => $isMotor ? ($data['tahun'] ?? null) : null,
         ];
     }
 

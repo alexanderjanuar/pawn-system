@@ -16,9 +16,10 @@ use Illuminate\Support\Carbon;
  * @property string|null $note
  * @property string|null $by
  * @property int|null $amount
+ * @property string|null $payment_method
  */
 #[Fillable([
-    'transaction_id', 'type', 'event_date', 'title', 'note', 'by', 'amount',
+    'transaction_id', 'type', 'event_date', 'title', 'note', 'by', 'amount', 'payment_method',
 ])]
 class TransactionEvent extends Model
 {

@@ -1,12 +1,22 @@
-import { Link } from '@inertiajs/react';
-import { ArrowLeftRight } from 'lucide-react';
+import { Link, router } from '@inertiajs/react';
+import { ArrowLeftRight, Banknote, Landmark } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { PetugasLink } from '@/components/petugas-link';
 import { TablePagination } from '@/components/table-pagination';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
+import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { usePagination } from '@/hooks/use-pagination';
 import { formatDate, formatRupiah } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 export type CashKind = 'tebus' | 'perpanjang' | 'lelang' | 'pencairan';
+export type PaymentMethod = 'cash' | 'transfer';
 export type CashEntry = {
     id: number;
     code: string;
@@ -14,12 +24,21 @@ export type CashEntry = {
     kind: CashKind;
     direction: 'in' | 'out';
     amount: number;
+    method: PaymentMethod | null;
     date: string;
     time: string | null;
     clerk: string;
 };
 export type CashFlow = {
-    in: { tebus: number; perpanjang: number; lelang: number; total: number };
+    in: {
+        tebus: number;
+        perpanjang: number;
+        lelang: number;
+        cash: number;
+        transfer: number;
+        unset: number;
+        total: number;
+    };
     out: { pencairan: number; total: number };
     net: number;
     entries: CashEntry[];
@@ -45,7 +64,15 @@ export function CashFlowPanel({
     periodLabel: string;
     title?: string;
 }) {
-    const kas = usePagination(cashFlow.entries, 10);
+    const [view, setView] = useState<'all' | 'in' | 'out'>('all');
+    const filtered = useMemo(
+        () =>
+            view === 'all'
+                ? cashFlow.entries
+                : cashFlow.entries.filter((e) => e.direction === view),
+        [cashFlow.entries, view],
+    );
+    const kas = usePagination(filtered, 10);
 
     return (
         <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -104,7 +131,63 @@ export function CashFlowPanel({
                 </div>
             </div>
 
-            <div className="overflow-x-auto border-t">
+            {/* Pemasukan per metode — memudahkan hitung tunai vs transfer */}
+            <div className="grid grid-cols-2 divide-x border-t">
+                <div className="flex flex-col gap-1 p-4 sm:p-5">
+                    <span className="flex items-center gap-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                        <Banknote className="size-3.5 text-primary" />
+                        Pemasukan Tunai
+                    </span>
+                    <span className="text-lg font-semibold tabular-nums sm:text-xl">
+                        {formatRupiah(cashFlow.in.cash)}
+                    </span>
+                </div>
+                <div className="flex flex-col gap-1 p-4 sm:p-5">
+                    <span className="flex items-center gap-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                        <Landmark className="size-3.5 text-aktif" />
+                        Pemasukan Transfer
+                    </span>
+                    <span className="text-lg font-semibold tabular-nums sm:text-xl">
+                        {formatRupiah(cashFlow.in.transfer)}
+                    </span>
+                </div>
+            </div>
+            {cashFlow.in.unset > 0 && (
+                <div className="border-t bg-overdue-soft/30 px-5 py-2 text-xs text-muted-foreground">
+                    Belum diisi metode:{' '}
+                    <span className="font-semibold text-overdue">
+                        {formatRupiah(cashFlow.in.unset)}
+                    </span>{' '}
+                    — pilih Tunai/Transfer di tabel untuk melengkapi.
+                </div>
+            )}
+
+            {/* Filter tampilan tabel: pemasukan, pengeluaran, atau keduanya */}
+            <div className="flex flex-col gap-2 border-t px-5 py-3 sm:flex-row sm:items-center sm:justify-between">
+                <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                    Rincian transaksi
+                </span>
+                <ToggleGroup
+                    type="single"
+                    variant="outline"
+                    value={view}
+                    onValueChange={(v) =>
+                        v && setView(v as 'all' | 'in' | 'out')
+                    }
+                >
+                    <ToggleGroupItem value="all" className="px-3 text-xs">
+                        Keduanya
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="in" className="px-3 text-xs">
+                        Masuk
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="out" className="px-3 text-xs">
+                        Keluar
+                    </ToggleGroupItem>
+                </ToggleGroup>
+            </div>
+
+            <div className="overflow-x-auto">
                 <table className="w-full min-w-[46rem] text-sm">
                     <thead>
                         <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
@@ -112,6 +195,7 @@ export function CashFlowPanel({
                             <th className="px-5 py-3 font-medium">Kode</th>
                             <th className="px-5 py-3 font-medium">Pelanggan</th>
                             <th className="px-5 py-3 font-medium">Jenis</th>
+                            <th className="px-5 py-3 font-medium">Metode</th>
                             <th className="px-5 py-3 font-medium">Petugas</th>
                             <th className="px-5 py-3 text-right font-medium">
                                 Jumlah
@@ -151,6 +235,15 @@ export function CashFlowPanel({
                                         </span>
                                     </td>
                                     <td className="px-5 py-3">
+                                        {e.direction === 'in' ? (
+                                            <MethodSelect entry={e} />
+                                        ) : (
+                                            <span className="text-muted-foreground">
+                                                —
+                                            </span>
+                                        )}
+                                    </td>
+                                    <td className="px-5 py-3">
                                         <PetugasLink name={e.clerk} />
                                     </td>
                                     <td
@@ -169,7 +262,7 @@ export function CashFlowPanel({
                         ) : (
                             <tr>
                                 <td
-                                    colSpan={6}
+                                    colSpan={7}
                                     className="px-5 py-10 text-center text-muted-foreground"
                                 >
                                     Belum ada uang masuk atau keluar pada periode
@@ -180,7 +273,7 @@ export function CashFlowPanel({
                     </tbody>
                 </table>
             </div>
-            {cashFlow.entries.length > 0 && (
+            {filtered.length > 0 && (
                 <TablePagination
                     page={kas.page}
                     totalPages={kas.totalPages}
@@ -193,5 +286,39 @@ export function CashFlowPanel({
                 />
             )}
         </section>
+    );
+}
+
+/** Inline cash/transfer picker for one movement; saves on change. */
+function MethodSelect({ entry }: { entry: CashEntry }) {
+    return (
+        <Select
+            value={entry.method ?? undefined}
+            onValueChange={(value) =>
+                router.patch(
+                    `/kas/entri/${entry.id}/metode`,
+                    { payment_method: value },
+                    { preserveScroll: true },
+                )
+            }
+        >
+            <SelectTrigger className="h-8 w-[132px] text-xs">
+                <SelectValue placeholder="Pilih metode" />
+            </SelectTrigger>
+            <SelectContent>
+                <SelectItem value="cash">
+                    <span className="flex items-center gap-1.5">
+                        <Banknote className="size-3.5 text-primary" />
+                        Tunai
+                    </span>
+                </SelectItem>
+                <SelectItem value="transfer">
+                    <span className="flex items-center gap-1.5">
+                        <Landmark className="size-3.5 text-aktif" />
+                        Transfer
+                    </span>
+                </SelectItem>
+            </SelectContent>
+        </Select>
     );
 }

@@ -1,11 +1,13 @@
 import { Head, Link, useForm, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
+    Bike,
     CalendarClock,
     Hash,
     History,
     IdCard,
     Info,
+    Laptop,
     Printer,
     Save,
     ShieldAlert,
@@ -37,23 +39,35 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { addDays, formatDate, formatRupiah, TODAY } from '@/lib/format';
-import { computeFee, PHOTO_LABELS, STATUS_META, STATUS_ORDER } from '@/lib/gadai';
+import {
+    computeFee,
+    PHOTO_LABELS,
+    STATUS_META,
+    STATUS_ORDER,
+} from '@/lib/gadai';
 import { cn, initials } from '@/lib/utils';
 import type {
     Customer,
     DeviceLockType,
+    DeviceType,
     GadaiStatus,
-    Kelengkapan,
     Transaction,
 } from '@/types/gadai';
 
 type TenorChoice = '15' | '30' | 'custom';
 
-const KELENGKAPAN: Kelengkapan[] = [
+// Quick-fill suggestions; the field itself accepts any free text so motor,
+// laptop, or anything else works too.
+const KELENGKAPAN_SUGGESTIONS: string[] = [
     'HP saja',
     'HP + Box',
     'HP + Charger',
     'HP + Box + Charger',
+    'Motor + STNK',
+    'Motor + STNK + BPKB',
+    'Laptop saja',
+    'Laptop + Charger',
+    'Laptop + Tas + Charger',
 ];
 
 const RAM_OPTIONS = ['3 GB', '4 GB', '6 GB', '8 GB', '12 GB', '16 GB'];
@@ -134,6 +148,7 @@ export function GadaiForm({
         address: '',
         id_number: '',
         device_owner: transaction?.deviceOwner ?? '',
+        device_type: (transaction?.device.type ?? 'hp') as DeviceType,
         device_name: transaction?.device.name ?? '',
         device_ram: transaction?.device.ram ?? '',
         device_storage: transaction?.device.storage ?? '',
@@ -143,8 +158,12 @@ export function GadaiForm({
         device_lock_type: (transaction?.device.lockType ??
             'none') as DeviceLockType,
         device_lock_value: transaction?.device.lockValue ?? '',
-        kelengkapan: (transaction?.device.kelengkapan ??
-            'HP + Box + Charger') as Kelengkapan,
+        plat_nomor: transaction?.device.platNomor ?? '',
+        no_rangka: transaction?.device.noRangka ?? '',
+        no_mesin: transaction?.device.noMesin ?? '',
+        warna: transaction?.device.warna ?? '',
+        tahun: transaction?.device.tahun ?? '',
+        kelengkapan: transaction?.device.kelengkapan ?? '',
         status: transaction?.status ?? 'AKTIF',
         clerk: transaction?.clerk ?? '',
         rak_id: transaction?.rakId ? String(transaction.rakId) : 'none',
@@ -275,6 +294,23 @@ export function GadaiForm({
         data.customer_mode === 'existing'
             ? (selectedCustomer?.name ?? '')
             : data.name.trim();
+
+    // Which fields to show depends on the item type (HP is the default).
+    const itemType = data.device_type;
+    const isHp = itemType === 'hp';
+    const isMotor = itemType === 'motor';
+    const isLaptop = itemType === 'laptop';
+    const hasSpecs = isHp || isLaptop; // RAM, penyimpanan, nomor seri, kunci
+    const nameLabel = isHp
+        ? 'Nama HP'
+        : isMotor
+          ? 'Merk / Tipe Motor'
+          : 'Merk / Tipe Laptop';
+    const namePlaceholder = isHp
+        ? 'cth. iPhone 13 Pro'
+        : isMotor
+          ? 'cth. Honda Vario 125'
+          : 'cth. Asus ROG Strix';
 
     const onPrincipalChange = (raw: string) => {
         const digits = raw.replace(/\D/g, '');
@@ -608,11 +644,52 @@ export function GadaiForm({
                         <SectionCard
                             icon={Smartphone}
                             title="Detail Barang"
-                            description="Spesifikasi HP yang digadaikan."
+                            description="Jenis barang, spesifikasi, dan kelengkapan."
                         >
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <Field
-                                    label="Nama HP"
+                                    label="Jenis Barang"
+                                    className="sm:col-span-2"
+                                >
+                                    <ToggleGroup
+                                        type="single"
+                                        variant="outline"
+                                        value={data.device_type}
+                                        onValueChange={(v) =>
+                                            v &&
+                                            setData(
+                                                'device_type',
+                                                v as DeviceType,
+                                            )
+                                        }
+                                        className="justify-start"
+                                    >
+                                        <ToggleGroupItem
+                                            value="hp"
+                                            className="gap-1.5 px-4"
+                                        >
+                                            <Smartphone className="size-4" />
+                                            HP
+                                        </ToggleGroupItem>
+                                        <ToggleGroupItem
+                                            value="motor"
+                                            className="gap-1.5 px-4"
+                                        >
+                                            <Bike className="size-4" />
+                                            Motor
+                                        </ToggleGroupItem>
+                                        <ToggleGroupItem
+                                            value="laptop"
+                                            className="gap-1.5 px-4"
+                                        >
+                                            <Laptop className="size-4" />
+                                            Laptop
+                                        </ToggleGroupItem>
+                                    </ToggleGroup>
+                                </Field>
+
+                                <Field
+                                    label={nameLabel}
                                     htmlFor="device"
                                     className="sm:col-span-2"
                                     hint={errors.device_name}
@@ -626,201 +703,343 @@ export function GadaiForm({
                                                 e.target.value,
                                             )
                                         }
-                                        placeholder="cth. iPhone 13 Pro"
+                                        placeholder={namePlaceholder}
                                     />
                                 </Field>
-                                <Field label="RAM">
-                                    <Select
-                                        value={data.device_ram}
-                                        onValueChange={(v) =>
-                                            setData('device_ram', v)
-                                        }
-                                    >
-                                        <SelectTrigger className="w-full">
-                                            <SelectValue placeholder="Pilih RAM" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {RAM_OPTIONS.map((r) => (
-                                                <SelectItem key={r} value={r}>
-                                                    {r}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </Field>
-                                <Field label="Memori Internal">
-                                    <Select
-                                        value={data.device_storage}
-                                        onValueChange={(v) =>
-                                            setData('device_storage', v)
-                                        }
-                                    >
-                                        <SelectTrigger className="w-full">
-                                            <SelectValue placeholder="Pilih memori" />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {STORAGE_OPTIONS.map((s) => (
-                                                <SelectItem key={s} value={s}>
-                                                    {s}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </Field>
-                                <Field
-                                    label="Nomor Seri"
-                                    htmlFor="serial"
-                                    className="sm:col-span-2"
-                                >
-                                    <Input
-                                        id="serial"
-                                        value={data.device_serial}
-                                        onChange={(e) =>
-                                            setData(
-                                                'device_serial',
-                                                e.target.value,
-                                            )
-                                        }
-                                        placeholder="Nomor seri perangkat"
-                                    />
-                                </Field>
-                                <ImeiField
-                                    id="imei1"
-                                    label="IMEI 1"
-                                    value={data.imei_1}
-                                    onChange={(v) => setData('imei_1', v)}
-                                    excludeCode={isEdit ? transaction?.id : null}
-                                />
-                                <ImeiField
-                                    id="imei2"
-                                    label="IMEI 2"
-                                    value={data.imei_2}
-                                    onChange={(v) => setData('imei_2', v)}
-                                    excludeCode={isEdit ? transaction?.id : null}
-                                />
-                                <Field
-                                    label="Kelengkapan"
-                                    className="sm:col-span-2"
-                                >
-                                    <ToggleGroup
-                                        type="single"
-                                        variant="outline"
-                                        value={data.kelengkapan}
-                                        onValueChange={(v) =>
-                                            v &&
-                                            setData(
-                                                'kelengkapan',
-                                                v as Kelengkapan,
-                                            )
-                                        }
-                                        className="flex-wrap justify-start"
-                                    >
-                                        {KELENGKAPAN.map((k) => (
-                                            <ToggleGroupItem
-                                                key={k}
-                                                value={k}
-                                                className="px-3.5"
-                                            >
-                                                {k}
-                                            </ToggleGroupItem>
-                                        ))}
-                                    </ToggleGroup>
-                                </Field>
-                                <Field
-                                    label="Kunci HP"
-                                    className="sm:col-span-2"
-                                    hint={
-                                        errors.device_lock_value ??
-                                        'Untuk membuka HP saat pengecekan atau saat masuk lelang.'
-                                    }
-                                >
-                                    <div className="grid gap-3">
-                                        <ToggleGroup
-                                            type="single"
-                                            variant="outline"
-                                            value={data.device_lock_type}
-                                            onValueChange={(v) =>
-                                                v &&
-                                                setData((prev) => ({
-                                                    ...prev,
-                                                    device_lock_type:
-                                                        v as DeviceLockType,
-                                                    device_lock_value: '',
-                                                }))
-                                            }
-                                            className="flex-wrap justify-start"
-                                        >
-                                            <ToggleGroupItem
-                                                value="none"
-                                                className="px-3.5"
-                                            >
-                                                Tidak Ada
-                                            </ToggleGroupItem>
-                                            <ToggleGroupItem
-                                                value="pin"
-                                                className="px-3.5"
-                                            >
-                                                PIN
-                                            </ToggleGroupItem>
-                                            <ToggleGroupItem
-                                                value="password"
-                                                className="px-3.5"
-                                            >
-                                                Kata Sandi
-                                            </ToggleGroupItem>
-                                            <ToggleGroupItem
-                                                value="pattern"
-                                                className="px-3.5"
-                                            >
-                                                Pola
-                                            </ToggleGroupItem>
-                                        </ToggleGroup>
 
-                                        {data.device_lock_type === 'pin' && (
-                                            <Input
-                                                inputMode="numeric"
-                                                value={data.device_lock_value}
-                                                onChange={(e) =>
-                                                    setData(
-                                                        'device_lock_value',
-                                                        e.target.value.replace(
-                                                            /\D/g,
-                                                            '',
-                                                        ),
-                                                    )
+                                {hasSpecs && (
+                                    <>
+                                        <Field label="RAM">
+                                            <Select
+                                                value={data.device_ram}
+                                                onValueChange={(v) =>
+                                                    setData('device_ram', v)
                                                 }
-                                                placeholder="cth. 1234"
-                                                className="max-w-xs tabular-nums"
-                                            />
-                                        )}
-                                        {data.device_lock_type ===
-                                            'password' && (
+                                            >
+                                                <SelectTrigger className="w-full">
+                                                    <SelectValue placeholder="Pilih RAM" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {RAM_OPTIONS.map((r) => (
+                                                        <SelectItem
+                                                            key={r}
+                                                            value={r}
+                                                        >
+                                                            {r}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </Field>
+                                        <Field
+                                            label={
+                                                isLaptop
+                                                    ? 'Penyimpanan'
+                                                    : 'Memori Internal'
+                                            }
+                                        >
+                                            <Select
+                                                value={data.device_storage}
+                                                onValueChange={(v) =>
+                                                    setData('device_storage', v)
+                                                }
+                                            >
+                                                <SelectTrigger className="w-full">
+                                                    <SelectValue placeholder="Pilih memori" />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {STORAGE_OPTIONS.map(
+                                                        (s) => (
+                                                            <SelectItem
+                                                                key={s}
+                                                                value={s}
+                                                            >
+                                                                {s}
+                                                            </SelectItem>
+                                                        ),
+                                                    )}
+                                                </SelectContent>
+                                            </Select>
+                                        </Field>
+                                        <Field
+                                            label="Nomor Seri"
+                                            htmlFor="serial"
+                                            className="sm:col-span-2"
+                                        >
                                             <Input
-                                                value={data.device_lock_value}
+                                                id="serial"
+                                                value={data.device_serial}
                                                 onChange={(e) =>
                                                     setData(
-                                                        'device_lock_value',
+                                                        'device_serial',
                                                         e.target.value,
                                                     )
                                                 }
-                                                placeholder="Kata sandi HP"
-                                                className="max-w-xs"
+                                                placeholder="Nomor seri perangkat"
                                             />
-                                        )}
-                                        {data.device_lock_type ===
-                                            'pattern' && (
-                                            <PatternLock
-                                                value={data.device_lock_value}
-                                                onChange={(v) =>
+                                        </Field>
+                                    </>
+                                )}
+
+                                {isHp && (
+                                    <>
+                                        <ImeiField
+                                            id="imei1"
+                                            label="IMEI 1"
+                                            value={data.imei_1}
+                                            onChange={(v) =>
+                                                setData('imei_1', v)
+                                            }
+                                            excludeCode={
+                                                isEdit ? transaction?.id : null
+                                            }
+                                        />
+                                        <ImeiField
+                                            id="imei2"
+                                            label="IMEI 2"
+                                            value={data.imei_2}
+                                            onChange={(v) =>
+                                                setData('imei_2', v)
+                                            }
+                                            excludeCode={
+                                                isEdit ? transaction?.id : null
+                                            }
+                                        />
+                                    </>
+                                )}
+
+                                {isMotor && (
+                                    <>
+                                        <Field
+                                            label="Plat Nomor"
+                                            htmlFor="plat"
+                                        >
+                                            <Input
+                                                id="plat"
+                                                value={data.plat_nomor}
+                                                onChange={(e) =>
                                                     setData(
-                                                        'device_lock_value',
-                                                        v,
+                                                        'plat_nomor',
+                                                        e.target.value,
                                                     )
                                                 }
+                                                placeholder="cth. DD 1234 AB"
                                             />
-                                        )}
+                                        </Field>
+                                        <Field label="Tahun" htmlFor="tahun">
+                                            <Input
+                                                id="tahun"
+                                                inputMode="numeric"
+                                                value={data.tahun}
+                                                onChange={(e) =>
+                                                    setData(
+                                                        'tahun',
+                                                        e.target.value
+                                                            .replace(/\D/g, '')
+                                                            .slice(0, 4),
+                                                    )
+                                                }
+                                                placeholder="cth. 2021"
+                                            />
+                                        </Field>
+                                        <Field
+                                            label="No. Rangka"
+                                            htmlFor="rangka"
+                                        >
+                                            <Input
+                                                id="rangka"
+                                                value={data.no_rangka}
+                                                onChange={(e) =>
+                                                    setData(
+                                                        'no_rangka',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                placeholder="Nomor rangka"
+                                            />
+                                        </Field>
+                                        <Field
+                                            label="No. Mesin"
+                                            htmlFor="mesin"
+                                        >
+                                            <Input
+                                                id="mesin"
+                                                value={data.no_mesin}
+                                                onChange={(e) =>
+                                                    setData(
+                                                        'no_mesin',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                placeholder="Nomor mesin"
+                                            />
+                                        </Field>
+                                        <Field
+                                            label="Warna"
+                                            htmlFor="warna"
+                                            className="sm:col-span-2"
+                                        >
+                                            <Input
+                                                id="warna"
+                                                value={data.warna}
+                                                onChange={(e) =>
+                                                    setData(
+                                                        'warna',
+                                                        e.target.value,
+                                                    )
+                                                }
+                                                placeholder="cth. Merah"
+                                            />
+                                        </Field>
+                                    </>
+                                )}
+
+                                <Field
+                                    label="Kelengkapan"
+                                    htmlFor="kelengkapan"
+                                    className="sm:col-span-2"
+                                    hint={errors.kelengkapan}
+                                >
+                                    <Input
+                                        id="kelengkapan"
+                                        value={data.kelengkapan}
+                                        onChange={(e) =>
+                                            setData(
+                                                'kelengkapan',
+                                                e.target.value,
+                                            )
+                                        }
+                                        placeholder="cth. HP + Box + Charger, Motor + STNK, Laptop + Charger"
+                                    />
+                                    <div className="mt-2 flex flex-wrap gap-1.5">
+                                        {KELENGKAPAN_SUGGESTIONS.map((k) => (
+                                            <button
+                                                key={k}
+                                                type="button"
+                                                onClick={() =>
+                                                    setData('kelengkapan', k)
+                                                }
+                                                className={cn(
+                                                    'rounded-full border px-2.5 py-1 text-xs transition-colors',
+                                                    data.kelengkapan === k
+                                                        ? 'border-primary bg-primary/10 text-primary'
+                                                        : 'text-muted-foreground hover:bg-accent',
+                                                )}
+                                            >
+                                                {k}
+                                            </button>
+                                        ))}
                                     </div>
                                 </Field>
+
+                                {hasSpecs && (
+                                    <Field
+                                        label={
+                                            isLaptop
+                                                ? 'Kata Sandi / Kunci'
+                                                : 'Kunci HP'
+                                        }
+                                        className="sm:col-span-2"
+                                        hint={
+                                            errors.device_lock_value ??
+                                            'Untuk membuka barang saat pengecekan atau saat masuk lelang.'
+                                        }
+                                    >
+                                        <div className="grid gap-3">
+                                            <ToggleGroup
+                                                type="single"
+                                                variant="outline"
+                                                value={data.device_lock_type}
+                                                onValueChange={(v) =>
+                                                    v &&
+                                                    setData((prev) => ({
+                                                        ...prev,
+                                                        device_lock_type:
+                                                            v as DeviceLockType,
+                                                        device_lock_value: '',
+                                                    }))
+                                                }
+                                                className="flex-wrap justify-start"
+                                            >
+                                                <ToggleGroupItem
+                                                    value="none"
+                                                    className="px-3.5"
+                                                >
+                                                    Tidak Ada
+                                                </ToggleGroupItem>
+                                                <ToggleGroupItem
+                                                    value="pin"
+                                                    className="px-3.5"
+                                                >
+                                                    PIN
+                                                </ToggleGroupItem>
+                                                <ToggleGroupItem
+                                                    value="password"
+                                                    className="px-3.5"
+                                                >
+                                                    Kata Sandi
+                                                </ToggleGroupItem>
+                                                <ToggleGroupItem
+                                                    value="pattern"
+                                                    className="px-3.5"
+                                                >
+                                                    Pola
+                                                </ToggleGroupItem>
+                                            </ToggleGroup>
+
+                                            {data.device_lock_type ===
+                                                'pin' && (
+                                                <Input
+                                                    inputMode="numeric"
+                                                    value={
+                                                        data.device_lock_value
+                                                    }
+                                                    onChange={(e) =>
+                                                        setData(
+                                                            'device_lock_value',
+                                                            e.target.value.replace(
+                                                                /\D/g,
+                                                                '',
+                                                            ),
+                                                        )
+                                                    }
+                                                    placeholder="cth. 1234"
+                                                    className="max-w-xs tabular-nums"
+                                                />
+                                            )}
+                                            {data.device_lock_type ===
+                                                'password' && (
+                                                <Input
+                                                    value={
+                                                        data.device_lock_value
+                                                    }
+                                                    onChange={(e) =>
+                                                        setData(
+                                                            'device_lock_value',
+                                                            e.target.value,
+                                                        )
+                                                    }
+                                                    placeholder="Kata sandi"
+                                                    className="max-w-xs"
+                                                />
+                                            )}
+                                            {data.device_lock_type ===
+                                                'pattern' && (
+                                                <PatternLock
+                                                    value={
+                                                        data.device_lock_value
+                                                    }
+                                                    onChange={(v) =>
+                                                        setData(
+                                                            'device_lock_value',
+                                                            v,
+                                                        )
+                                                    }
+                                                />
+                                            )}
+                                        </div>
+                                    </Field>
+                                )}
                             </div>
                         </SectionCard>
 
@@ -1148,10 +1367,7 @@ export function GadaiForm({
                                     </>
                                 )}
 
-                                <Field
-                                    label="Tanggal masuk"
-                                    htmlFor="masuk"
-                                >
+                                <Field label="Tanggal masuk" htmlFor="masuk">
                                     <DatePicker
                                         id="masuk"
                                         value={data.start_date}

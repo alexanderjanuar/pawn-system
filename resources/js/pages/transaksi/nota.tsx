@@ -117,7 +117,9 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
                 <p
                     className={cn(
                         'font-medium',
-                        half ? 'mt-0.5 text-[8px]' : 'mt-1 text-[11px] sm:text-sm',
+                        half
+                            ? 'mt-0.5 text-[8px]'
+                            : 'mt-1 text-[11px] sm:text-sm',
                     )}
                 >
                     Jl. Serayu Tanah Merah No. 57 / Hp : 0852 2387 7117
@@ -184,7 +186,11 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
                     label="Tanggal Masuk"
                     value={formatDate(tx.notaStartDate)}
                 />
-                <Row half={half} label="Nama Pelanggan" value={tx.customer.name} />
+                <Row
+                    half={half}
+                    label="Nama Pelanggan"
+                    value={tx.customer.name}
+                />
                 <Row
                     half={half}
                     label="No. HP Pelanggan"
@@ -196,9 +202,36 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
 
             {/* Barang */}
             <FieldBox half={half}>
-                <Row half={half} label="Nama & Tipe Barang" value={tx.device.name} />
-                <Row half={half} label="Kelengkapan" value={tx.device.kelengkapan} />
-                <Row half={half} label="Nomor Seri" value={tx.device.serial} />
+                <Row
+                    half={half}
+                    label="Nama & Tipe Barang"
+                    value={tx.device.name}
+                />
+                <Row
+                    half={half}
+                    label="Kelengkapan"
+                    value={tx.device.kelengkapan}
+                />
+                {tx.device.type === 'motor' ? (
+                    <>
+                        <Row
+                            half={half}
+                            label="Plat Nomor"
+                            value={tx.device.platNomor || '-'}
+                        />
+                        <Row
+                            half={half}
+                            label="No. Rangka"
+                            value={tx.device.noRangka || '-'}
+                        />
+                    </>
+                ) : (
+                    <Row
+                        half={half}
+                        label="Nomor Seri"
+                        value={tx.device.serial}
+                    />
+                )}
             </FieldBox>
 
             {/* Dana */}
@@ -238,7 +271,9 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
             <div
                 className={cn(
                     'grid grid-cols-2',
-                    half ? 'mt-3 gap-3 text-[9px]' : 'mt-6 gap-8 text-sm print:mt-4',
+                    half
+                        ? 'mt-3 gap-3 text-[9px]'
+                        : 'mt-6 gap-8 text-sm print:mt-4',
                 )}
             >
                 <div>
@@ -298,13 +333,17 @@ function Row({
         <div
             className={cn(
                 'flex items-baseline border-neutral-900 last:border-b-0',
-                half ? 'gap-1.5 border-b px-2 py-1' : 'gap-2 border-b-2 px-3 py-2',
+                half
+                    ? 'gap-1.5 border-b px-2 py-1'
+                    : 'gap-2 border-b-2 px-3 py-2',
             )}
         >
             <span
                 className={cn(
                     'shrink-0 font-bold uppercase',
-                    half ? 'w-24 text-[8px]' : 'w-36 text-[11px] sm:w-56 sm:text-sm',
+                    half
+                        ? 'w-24 text-[8px]'
+                        : 'w-36 text-[11px] sm:w-56 sm:text-sm',
                 )}
             >
                 {label}

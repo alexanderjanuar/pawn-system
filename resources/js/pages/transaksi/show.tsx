@@ -2,12 +2,14 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import {
     AlertTriangle,
     ArrowLeft,
+    Banknote,
     Boxes,
     Check,
     Coins,
     Gavel,
     IdCard,
     ImageIcon,
+    Landmark,
     MapPin,
     MoreVertical,
     Pencil,
@@ -95,6 +97,18 @@ export default function TransaksiShow({
     // Past due and still live: prompt the owner/clerk to decide the next step.
     const overdue = running && d <= 0;
     const saleNet = tx.saleValue != null ? tx.saleValue - tx.principal : null;
+
+    // Which barang fields to show depends on the item type (HP is the default).
+    const itemType = tx.device.type ?? 'hp';
+    const isMotor = itemType === 'motor';
+    const isLaptop = itemType === 'laptop';
+    const hasSpecs = itemType === 'hp' || isLaptop;
+    const itemTypeLabel =
+        itemType === 'motor'
+            ? 'Motor'
+            : itemType === 'laptop'
+              ? 'Laptop'
+              : 'HP';
 
     const approve = () =>
         router.post(
@@ -417,7 +431,9 @@ export default function TransaksiShow({
                                             </Button>
                                             <Button
                                                 size="sm"
-                                                onClick={() => setSaleOpen(true)}
+                                                onClick={() =>
+                                                    setSaleOpen(true)
+                                                }
                                             >
                                                 <Coins />
                                                 Catat Penjualan
@@ -474,9 +490,14 @@ export default function TransaksiShow({
                             </div>
                             <div className="grid gap-4 sm:grid-cols-2">
                                 <div className="sm:col-span-2">
-                                    <p className="text-lg font-semibold">
-                                        {tx.device.name}
-                                    </p>
+                                    <div className="flex flex-wrap items-center gap-2">
+                                        <p className="text-lg font-semibold">
+                                            {tx.device.name}
+                                        </p>
+                                        <span className="inline-flex items-center rounded-full bg-secondary px-2 py-0.5 text-xs font-medium text-foreground/80">
+                                            {itemTypeLabel}
+                                        </span>
+                                    </div>
                                     <p className="text-sm text-muted-foreground">
                                         {tx.device.kelengkapan}
                                     </p>
@@ -487,16 +508,35 @@ export default function TransaksiShow({
                                             : 'Rak belum ditentukan'}
                                     </span>
                                 </div>
-                                <Spec label="RAM" value={tx.device.ram} />
-                                <Spec
-                                    label="Memori Internal"
-                                    value={tx.device.storage}
-                                />
-                                <Spec
-                                    label="Nomor Seri"
-                                    value={tx.device.serial}
-                                    mono
-                                />
+
+                                {hasSpecs && (
+                                    <>
+                                        {tx.device.ram && (
+                                            <Spec
+                                                label="RAM"
+                                                value={tx.device.ram}
+                                            />
+                                        )}
+                                        {tx.device.storage && (
+                                            <Spec
+                                                label={
+                                                    isLaptop
+                                                        ? 'Penyimpanan'
+                                                        : 'Memori Internal'
+                                                }
+                                                value={tx.device.storage}
+                                            />
+                                        )}
+                                        {tx.device.serial && (
+                                            <Spec
+                                                label="Nomor Seri"
+                                                value={tx.device.serial}
+                                                mono
+                                            />
+                                        )}
+                                    </>
+                                )}
+
                                 {tx.device.imei1 && (
                                     <Spec
                                         label="IMEI 1"
@@ -511,40 +551,90 @@ export default function TransaksiShow({
                                         mono
                                     />
                                 )}
-                                <Spec
-                                    label="Pemilik Device"
-                                    value={tx.deviceOwner}
-                                />
-                                {tx.device.lockType === 'none' ||
-                                !tx.device.lockValue ? (
-                                    <Spec label="Kunci HP" value="Tidak ada" />
-                                ) : tx.device.lockType === 'pattern' ? (
-                                    <div className="grid gap-1.5 sm:col-span-2">
-                                        <span className="text-xs text-muted-foreground">
-                                            Kunci HP · Pola
-                                        </span>
-                                        <PatternLock
-                                            value={tx.device.lockValue}
-                                            size={140}
-                                        />
-                                        <span className="text-xs text-muted-foreground">
-                                            Urutan:{' '}
-                                            {tx.device.lockValue
-                                                .split('-')
-                                                .join(' → ')}
-                                        </span>
-                                    </div>
-                                ) : (
-                                    <Spec
-                                        label={
-                                            tx.device.lockType === 'pin'
-                                                ? 'Kunci HP · PIN'
-                                                : 'Kunci HP · Kata Sandi'
-                                        }
-                                        value={tx.device.lockValue}
-                                        mono
-                                    />
+
+                                {isMotor && (
+                                    <>
+                                        {tx.device.platNomor && (
+                                            <Spec
+                                                label="Plat Nomor"
+                                                value={tx.device.platNomor}
+                                                mono
+                                            />
+                                        )}
+                                        {tx.device.tahun && (
+                                            <Spec
+                                                label="Tahun"
+                                                value={tx.device.tahun}
+                                            />
+                                        )}
+                                        {tx.device.noRangka && (
+                                            <Spec
+                                                label="No. Rangka"
+                                                value={tx.device.noRangka}
+                                                mono
+                                            />
+                                        )}
+                                        {tx.device.noMesin && (
+                                            <Spec
+                                                label="No. Mesin"
+                                                value={tx.device.noMesin}
+                                                mono
+                                            />
+                                        )}
+                                        {tx.device.warna && (
+                                            <Spec
+                                                label="Warna"
+                                                value={tx.device.warna}
+                                            />
+                                        )}
+                                    </>
                                 )}
+
+                                <Spec label="Pemilik" value={tx.deviceOwner} />
+
+                                {hasSpecs &&
+                                    (tx.device.lockType === 'none' ||
+                                    !tx.device.lockValue ? (
+                                        <Spec
+                                            label={
+                                                isLaptop
+                                                    ? 'Kata Sandi / Kunci'
+                                                    : 'Kunci HP'
+                                            }
+                                            value="Tidak ada"
+                                        />
+                                    ) : tx.device.lockType === 'pattern' ? (
+                                        <div className="grid gap-1.5 sm:col-span-2">
+                                            <span className="text-xs text-muted-foreground">
+                                                {isLaptop
+                                                    ? 'Kunci · Pola'
+                                                    : 'Kunci HP · Pola'}
+                                            </span>
+                                            <PatternLock
+                                                value={tx.device.lockValue}
+                                                size={140}
+                                            />
+                                            <span className="text-xs text-muted-foreground">
+                                                Urutan:{' '}
+                                                {tx.device.lockValue
+                                                    .split('-')
+                                                    .join(' → ')}
+                                            </span>
+                                        </div>
+                                    ) : (
+                                        <Spec
+                                            label={
+                                                (isLaptop
+                                                    ? 'Kunci'
+                                                    : 'Kunci HP') +
+                                                (tx.device.lockType === 'pin'
+                                                    ? ' · PIN'
+                                                    : ' · Kata Sandi')
+                                            }
+                                            value={tx.device.lockValue}
+                                            mono
+                                        />
+                                    ))}
                             </div>
 
                             {(tx.photos?.length ?? 0) > 0 || tx.ktp ? (
@@ -676,7 +766,9 @@ function Figure({
     emphasize?: boolean;
 }) {
     return (
-        <div className={cn('flex min-w-0 flex-col gap-1 p-4 sm:p-5', className)}>
+        <div
+            className={cn('flex min-w-0 flex-col gap-1 p-4 sm:p-5', className)}
+        >
             <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                 {label}
             </span>
@@ -851,6 +943,7 @@ function PerpanjangDialog({ tx }: { tx: Transaction }) {
             until: addDays(tx.dueDate, 15),
             fee: presetFee,
             fee_paid: false,
+            payment_method: 'cash' as PaymentMethod,
         });
 
     const newDue =
@@ -954,7 +1047,9 @@ function PerpanjangDialog({ tx }: { tx: Transaction }) {
                             )}
                         </div>
                         <div className="grid gap-1.5">
-                            <Label htmlFor="perpanjang-fee">Biaya titipan</Label>
+                            <Label htmlFor="perpanjang-fee">
+                                Biaya titipan
+                            </Label>
                             <div className="relative">
                                 <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
                                     Rp
@@ -1009,6 +1104,11 @@ function PerpanjangDialog({ tx }: { tx: Transaction }) {
                     />
                 </dl>
 
+                <PaymentMethodField
+                    value={data.payment_method}
+                    onChange={(v) => setData('payment_method', v)}
+                />
+
                 <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-sm">
                     <Checkbox
                         checked={data.fee_paid}
@@ -1046,12 +1146,61 @@ function PerpanjangDialog({ tx }: { tx: Transaction }) {
     );
 }
 
+type PaymentMethod = 'cash' | 'transfer';
+
+/** Tunai / Transfer picker shared by the Tebus and Perpanjang dialogs. */
+function PaymentMethodField({
+    value,
+    onChange,
+}: {
+    value: PaymentMethod;
+    onChange: (value: PaymentMethod) => void;
+}) {
+    return (
+        <div className="grid gap-1.5">
+            <Label>Metode pembayaran</Label>
+            <ToggleGroup
+                type="single"
+                variant="outline"
+                value={value}
+                onValueChange={(v) => v && onChange(v as PaymentMethod)}
+                className="w-full"
+            >
+                <ToggleGroupItem
+                    value="cash"
+                    className="h-auto flex-1 gap-1.5 py-2"
+                >
+                    <Banknote className="size-4" />
+                    Tunai
+                </ToggleGroupItem>
+                <ToggleGroupItem
+                    value="transfer"
+                    className="h-auto flex-1 gap-1.5 py-2"
+                >
+                    <Landmark className="size-4" />
+                    Transfer
+                </ToggleGroupItem>
+            </ToggleGroup>
+        </div>
+    );
+}
+
 function TebusDialog({ tx }: { tx: Transaction }) {
     const [open, setOpen] = useState(false);
+    const [method, setMethod] = useState<PaymentMethod>('cash');
     const total = tx.principal + tx.fee;
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                setOpen(next);
+
+                if (!next) {
+                    setMethod('cash');
+                }
+            }}
+        >
             <DialogTrigger asChild>
                 <Button>
                     <Wallet />
@@ -1083,6 +1232,9 @@ function TebusDialog({ tx }: { tx: Transaction }) {
                         />
                     </div>
                 </dl>
+
+                <PaymentMethodField value={method} onChange={setMethod} />
+
                 <DialogFooter>
                     <DialogClose asChild>
                         <Button variant="outline">Batal</Button>
@@ -1091,7 +1243,7 @@ function TebusDialog({ tx }: { tx: Transaction }) {
                         onClick={() =>
                             router.post(
                                 `/transaksi/${tx.id}/tebus`,
-                                {},
+                                { payment_method: method },
                                 {
                                     preserveScroll: true,
                                     onSuccess: () => setOpen(false),

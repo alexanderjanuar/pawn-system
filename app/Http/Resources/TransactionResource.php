@@ -36,12 +36,18 @@ class TransactionResource extends JsonResource
             'customerCode' => $this->customer->code,
             'deviceOwner' => $this->device_owner,
             'device' => array_merge([
+                'type' => $this->device_type ?? 'hp',
                 'name' => $this->device_name,
                 'ram' => $this->device_ram,
                 'storage' => $this->device_storage,
                 'serial' => $this->device_serial,
                 'imei1' => $this->imei_1,
                 'imei2' => $this->imei_2,
+                'platNomor' => $this->plat_nomor,
+                'noRangka' => $this->no_rangka,
+                'noMesin' => $this->no_mesin,
+                'warna' => $this->warna,
+                'tahun' => $this->tahun,
                 'kelengkapan' => $this->kelengkapan,
             ], $request->user() !== null ? [
                 // The phone-unlock secret is staff-only; never expose it on the

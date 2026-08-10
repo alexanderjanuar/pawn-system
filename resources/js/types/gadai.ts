@@ -6,8 +6,8 @@
 export type GadaiStatus =
     'AKTIF' | 'PERPANJANG' | 'DIAMBIL' | 'TIDAK_DIAMBIL' | 'LELANG';
 
-export type Kelengkapan =
-    'HP saja' | 'HP + Box' | 'HP + Charger' | 'HP + Box + Charger';
+/** Free text now (HP, motor, laptop, dll) — was a fixed HP-only enum. */
+export type Kelengkapan = string;
 
 /** Contact snapshot stored on each transaction. */
 export type CustomerContact = {
@@ -40,14 +40,24 @@ export type Customer = CustomerContact & {
 
 export type DeviceLockType = 'none' | 'pin' | 'password' | 'pattern';
 
+/** Jenis barang yang digadaikan. HP tetap yang utama. */
+export type DeviceType = 'hp' | 'motor' | 'laptop';
+
 export type Device = {
-    name: string;
+    type: DeviceType;
+    name: string; // Nama HP / Merk-Tipe motor atau laptop
     ram: string;
     storage: string;
     serial: string; // nomor seri
     imei1: string | null;
     imei2: string | null;
-    lockType: DeviceLockType; // cara buka HP
+    // Khusus motor
+    platNomor: string | null;
+    noRangka: string | null;
+    noMesin: string | null;
+    warna: string | null;
+    tahun: string | null;
+    lockType: DeviceLockType; // cara buka HP / laptop
     lockValue: string | null; // PIN / kata sandi / urutan pola "1-2-3"
     kelengkapan: Kelengkapan;
 };

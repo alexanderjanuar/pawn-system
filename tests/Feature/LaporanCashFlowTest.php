@@ -82,6 +82,24 @@ test('cash flow only counts movements inside the selected period', function () {
         );
 });
 
+test('cash flow breaks income down by payment method', function () {
+    $tx = cashFlowTx();
+    $tx->events()->createMany([
+        ['type' => 'redeemed', 'event_date' => '2026-08-07', 'title' => 'Ditebus', 'by' => 'Rina', 'amount' => 1_100_000, 'payment_method' => 'cash'],
+        ['type' => 'extended', 'event_date' => '2026-08-06', 'title' => 'Diperpanjang', 'by' => 'Rina', 'amount' => 100_000, 'payment_method' => 'transfer'],
+        ['type' => 'auctioned', 'event_date' => '2026-08-08', 'title' => 'Terjual lelang', 'by' => 'Rina', 'amount' => 500_000, 'payment_method' => null],
+    ]);
+
+    $this->actingAs(User::factory()->create())
+        ->get('/kas?from=2026-08-01&to=2026-08-31')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('cashFlow.in.cash', 1_100_000)
+            ->where('cashFlow.in.transfer', 100_000)
+            ->where('cashFlow.in.unset', 500_000)
+            ->where('cashFlow.in.total', 1_700_000),
+        );
+});
+
 test('the kas page defaults to today', function () {
     $today = now()->toDateString();
 

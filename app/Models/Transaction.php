@@ -21,6 +21,7 @@ use Illuminate\Support\Carbon;
  * @property string $code
  * @property int $customer_id
  * @property string $device_owner
+ * @property string $device_type
  * @property string $device_name
  * @property string|null $device_ram
  * @property string|null $device_storage
@@ -29,6 +30,11 @@ use Illuminate\Support\Carbon;
  * @property string|null $imei_2
  * @property string $device_lock_type
  * @property string|null $device_lock_value
+ * @property string|null $plat_nomor
+ * @property string|null $no_rangka
+ * @property string|null $no_mesin
+ * @property string|null $warna
+ * @property string|null $tahun
  * @property string $kelengkapan
  * @property int $principal
  * @property int $tenor_days
@@ -47,8 +53,9 @@ use Illuminate\Support\Carbon;
  */
 #[Fillable([
     'store_id', 'rak_id',
-    'code', 'customer_id', 'device_owner', 'device_name', 'device_ram',
+    'code', 'customer_id', 'device_owner', 'device_type', 'device_name', 'device_ram',
     'device_storage', 'device_serial', 'imei_1', 'imei_2', 'device_lock_type', 'device_lock_value',
+    'plat_nomor', 'no_rangka', 'no_mesin', 'warna', 'tahun',
     'kelengkapan', 'principal', 'tenor_days',
     'fee_percent', 'fee', 'start_date', 'due_date', 'status', 'clerk', 'notes',
     'extensions', 'photos', 'ktp_path',

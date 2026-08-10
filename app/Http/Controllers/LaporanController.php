@@ -6,6 +6,7 @@ use App\Http\Resources\TransactionResource;
 use App\Models\Transaction;
 use App\Models\TransactionEvent;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -47,6 +48,28 @@ class LaporanController extends Controller
             'period' => ['from' => $from, 'to' => $to],
             'cashFlow' => $this->cashFlow($from, $to),
         ]);
+    }
+
+    /**
+     * Change how one cash-in movement was received (cash / transfer), edited
+     * inline from the daily-cash table. Only incoming-money events qualify.
+     */
+    public function updateCashMethod(Request $request, TransactionEvent $event): RedirectResponse
+    {
+        $data = $request->validate([
+            'payment_method' => ['required', 'in:cash,transfer'],
+        ]);
+
+        $inStore = Transaction::query()
+            ->forActiveStore()
+            ->whereKey($event->transaction_id)
+            ->exists();
+
+        abort_unless($inStore && in_array($event->type, ['redeemed', 'extended', 'auctioned'], true), 403);
+
+        $event->update(['payment_method' => $data['payment_method']]);
+
+        return back()->with('success', 'Metode pembayaran diperbarui.');
     }
 
     public function lelang(): Response
@@ -246,10 +269,10 @@ class LaporanController extends Controller
      * is listed individually so the clerk can tick it off against real cash.
      *
      * @return array{
-     *     in: array{tebus: int, perpanjang: int, lelang: int, total: int},
+     *     in: array{tebus: int, perpanjang: int, lelang: int, cash: int, transfer: int, unset: int, total: int},
      *     out: array{pencairan: int, total: int},
      *     net: int,
-     *     entries: array<int, array{id: int, code: string, customer: string, kind: string, direction: string, amount: int, date: string, time: string|null, clerk: string}>
+     *     entries: array<int, array{id: int, code: string, customer: string, kind: string, direction: string, amount: int, method: string|null, date: string, time: string|null, clerk: string}>
      * }
      */
     private function cashFlow(string $from, string $to): array
@@ -264,7 +287,7 @@ class LaporanController extends Controller
             ->orderByDesc('id')
             ->get();
 
-        $in = ['tebus' => 0, 'perpanjang' => 0, 'lelang' => 0, 'total' => 0];
+        $in = ['tebus' => 0, 'perpanjang' => 0, 'lelang' => 0, 'cash' => 0, 'transfer' => 0, 'unset' => 0, 'total' => 0];
         $out = ['pencairan' => 0, 'total' => 0];
         $entries = [];
 
@@ -292,6 +315,11 @@ class LaporanController extends Controller
             if ($direction === 'in') {
                 $in[$kind] += $amount;
                 $in['total'] += $amount;
+
+                $bucket = in_array($event->payment_method, ['cash', 'transfer'], true)
+                    ? $event->payment_method
+                    : 'unset';
+                $in[$bucket] += $amount;
             } else {
                 $out[$kind] += $amount;
                 $out['total'] += $amount;
@@ -304,6 +332,7 @@ class LaporanController extends Controller
                 'kind' => $kind,
                 'direction' => $direction,
                 'amount' => $amount,
+                'method' => $event->payment_method,
                 'date' => $event->event_date->format('Y-m-d'),
                 'time' => $event->created_at?->format('H.i'),
                 'clerk' => $event->by ?: $transaction->clerk,

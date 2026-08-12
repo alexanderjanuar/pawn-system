@@ -41,7 +41,8 @@ test('report income sums extension fees and redemption interest by payment date'
             // Two payment rows (extend + redeem); the disbursement is not income.
             ->has('feeIncome.entries', 2)
             ->where('feeIncome.entries.0.kind', 'tebus') // newest first (20 Aug)
-            ->where('feeIncome.entries.0.amount', 120_000),
+            ->where('feeIncome.entries.0.amount', 120_000)
+            ->where('feeIncome.entries.0.customer', 'Ika'),
         );
 });
 

@@ -852,7 +852,7 @@
     "isEntry": true
   },
   "resources/js/app.tsx": {
-    "file": "assets/app-9T2Kc9fE.js",
+    "file": "assets/app-D0q1zFh_.js",
     "name": "app",
     "src": "resources/js/app.tsx",
     "isEntry": true,
@@ -1100,7 +1100,7 @@
     ]
   },
   "resources/js/pages/laporan.tsx": {
-    "file": "assets/laporan-DmvQ3P_d.js",
+    "file": "assets/laporan-Db4TYifs.js",
     "name": "laporan",
     "src": "resources/js/pages/laporan.tsx",
     "isDynamicEntry": true,

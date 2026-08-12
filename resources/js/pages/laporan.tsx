@@ -326,13 +326,20 @@ export default function Laporan({
 
                 {/* Rincian pembayaran biaya: perpanjang & tebus */}
                 <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
-                    <div className="flex items-center justify-between gap-3 border-b px-5 py-4">
-                        <h2 className="flex items-center gap-2 font-semibold">
-                            <TrendingUp className="size-4 text-primary" />
-                            Rincian Pemasukan Biaya
-                            <IncomeInfo />
-                        </h2>
-                        <span className="text-xs text-muted-foreground">
+                    <div className="flex items-start justify-between gap-3 border-b px-5 py-4">
+                        <div>
+                            <h2 className="flex items-center gap-2 font-semibold">
+                                <TrendingUp className="size-4 text-primary" />
+                                Rincian Pemasukan Biaya
+                                <IncomeInfo />
+                            </h2>
+                            <p className="text-xs text-muted-foreground">
+                                Bunga yang dibayar · Tebus dihitung bunganya saja
+                                (tanpa pokok). Beda dengan Kas Harian yang
+                                menghitung uang fisik.
+                            </p>
+                        </div>
+                        <span className="shrink-0 text-xs text-muted-foreground">
                             {feeIncome.entries.length} pembayaran
                         </span>
                     </div>

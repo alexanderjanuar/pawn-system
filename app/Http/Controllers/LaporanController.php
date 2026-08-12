@@ -205,7 +205,7 @@ class LaporanController extends Controller
     private function feeIncome(string $from, string $to): array
     {
         $events = $this->feeIncomeEvents()
-            ->with(['transaction:id,code,principal,clerk', 'transaction.customer:id,name'])
+            ->with(['transaction:id,customer_id,code,principal,clerk', 'transaction.customer:id,name'])
             ->when($from !== '', fn ($q) => $q->whereDate('event_date', '>=', $from))
             ->when($to !== '', fn ($q) => $q->whereDate('event_date', '<=', $to))
             ->orderByDesc('event_date')

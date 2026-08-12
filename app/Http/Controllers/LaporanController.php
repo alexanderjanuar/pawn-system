@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Resources\TransactionResource;
 use App\Models\Transaction;
 use App\Models\TransactionEvent;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -26,6 +27,7 @@ class LaporanController extends Controller
             'trend' => $this->feeTrend(),
             'dailyTrend' => $this->dailyTrend(),
             'overview' => $this->overview(),
+            'feeIncome' => $this->feeIncomeBetween($from, $to),
         ]);
     }
 
@@ -165,22 +167,63 @@ class LaporanController extends Controller
     }
 
     /**
-     * Holding-fee (biaya titipan) charged per month, by loan start date, over
-     * the last 6 months (all data). Bucketed in PHP to stay DB-agnostic.
+     * Payment events that carry biaya-titipan (interest) actually collected:
+     * every extension fee, and the fee portion of every redemption.
+     *
+     * @return Builder<TransactionEvent>
+     */
+    private function feeIncomeEvents(): Builder
+    {
+        return TransactionEvent::query()
+            ->whereHas('transaction', fn ($q) => $q->forActiveStore())
+            ->whereIn('type', ['extended', 'redeemed'])
+            ->with('transaction:id,principal');
+    }
+
+    /**
+     * Interest earned by one payment event. Extensions are pure interest; a
+     * redemption pays principal + interest, so the interest is amount - pokok.
+     */
+    private function eventInterest(TransactionEvent $event): int
+    {
+        if ($event->type === 'redeemed') {
+            return max(0, (int) ($event->amount ?? 0) - (int) ($event->transaction?->principal ?? 0));
+        }
+
+        return (int) ($event->amount ?? 0);
+    }
+
+    /**
+     * Total interest (biaya titipan) actually collected between two dates,
+     * counted on the day it was paid. Includes every extension. An empty
+     * bound means unbounded.
+     */
+    private function feeIncomeBetween(string $from, string $to): int
+    {
+        return (int) $this->feeIncomeEvents()
+            ->when($from !== '', fn ($q) => $q->whereDate('event_date', '>=', $from))
+            ->when($to !== '', fn ($q) => $q->whereDate('event_date', '<=', $to))
+            ->get()
+            ->sum(fn (TransactionEvent $event) => $this->eventInterest($event));
+    }
+
+    /**
+     * Interest actually collected per month over the last 6 months, by the
+     * date each payment was made (so extensions land in the right month).
      *
      * @return array<int, array{label: string, value: int, current: bool}>
      */
     private function feeTrend(): array
     {
+        $start = now()->startOfMonth()->subMonths(5);
         $byMonth = [];
 
-        Transaction::query()
-            ->forActiveStore()
-            ->where('approval_status', '!=', 'rejected')
-            ->get(['fee', 'start_date', 'store_id'])
-            ->each(function (Transaction $t) use (&$byMonth) {
-                $key = $t->start_date->format('Y-m');
-                $byMonth[$key] = ($byMonth[$key] ?? 0) + $t->fee;
+        $this->feeIncomeEvents()
+            ->whereDate('event_date', '>=', $start->toDateString())
+            ->get()
+            ->each(function (TransactionEvent $event) use (&$byMonth) {
+                $key = $event->event_date->format('Y-m');
+                $byMonth[$key] = ($byMonth[$key] ?? 0) + $this->eventInterest($event);
             });
 
         $labels = ['Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];

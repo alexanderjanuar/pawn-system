@@ -50,12 +50,14 @@ export default function Laporan({
     trend,
     dailyTrend,
     overview,
+    feeIncome,
 }: {
     transactions: Transaction[];
     period: Period;
     trend: TrendPoint[];
     dailyTrend: TrendPoint[];
     overview: Overview;
+    feeIncome: number;
 }) {
     const report = useMemo(() => buildReport(transactions), [transactions]);
 
@@ -129,8 +131,8 @@ export default function Laporan({
         },
         {
             label: 'Pemasukan Biaya',
-            value: formatRupiah(report.pemasukanBiaya),
-            hint: 'biaya titipan periode ini',
+            value: formatRupiah(feeIncome),
+            hint: 'bunga dibayar periode ini (termasuk perpanjang)',
             tone: 'text-primary',
         },
         {
@@ -273,7 +275,7 @@ export default function Laporan({
                             </div>
                             <div className="text-right">
                                 <p className="text-lg font-semibold text-primary tabular-nums">
-                                    {formatRupiah(report.pemasukanBiaya)}
+                                    {formatRupiah(feeIncome)}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
                                     periode ini

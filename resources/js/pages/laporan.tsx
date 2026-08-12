@@ -38,7 +38,22 @@ import type { Transaction } from '@/types/gadai';
 
 type Period = { from: string; to: string };
 type TrendPoint = { label: string; value: number; current: boolean };
-type FeeIncome = { perpanjang: number; tebus: number; total: number };
+type FeeIncomeEntry = {
+    id: number;
+    code: string | null;
+    customer: string;
+    kind: 'perpanjang' | 'tebus';
+    amount: number;
+    date: string;
+    time: string | null;
+    clerk: string;
+};
+type FeeIncome = {
+    perpanjang: number;
+    tebus: number;
+    total: number;
+    entries: FeeIncomeEntry[];
+};
 type Overview = {
     uangBeredar: number;
     barangAktif: number;
@@ -65,6 +80,7 @@ export default function Laporan({
 
     const [activeClerk, setActiveClerk] = useState<string | null>(null);
     const rincian = usePagination(transactions, 10);
+    const feeRincian = usePagination(feeIncome.entries, 10);
     const labaBulanIni = trend.find((m) => m.current)?.value ?? 0;
 
     const statusSegments = report.perStatus.map((row) => ({
@@ -307,6 +323,129 @@ export default function Laporan({
                         />
                     </section>
                 </div>
+
+                {/* Rincian pembayaran biaya: perpanjang & tebus */}
+                <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
+                    <div className="flex items-center justify-between gap-3 border-b px-5 py-4">
+                        <h2 className="flex items-center gap-2 font-semibold">
+                            <TrendingUp className="size-4 text-primary" />
+                            Rincian Pemasukan Biaya
+                            <IncomeInfo />
+                        </h2>
+                        <span className="text-xs text-muted-foreground">
+                            {feeIncome.entries.length} pembayaran
+                        </span>
+                    </div>
+                    <div className="overflow-x-auto">
+                        <table className="w-full min-w-[46rem] text-sm">
+                            <thead>
+                                <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
+                                    <th className="px-5 py-3 font-medium">
+                                        Waktu
+                                    </th>
+                                    <th className="px-5 py-3 font-medium">
+                                        Kode
+                                    </th>
+                                    <th className="px-5 py-3 font-medium">
+                                        Pelanggan
+                                    </th>
+                                    <th className="px-5 py-3 font-medium">
+                                        Jenis
+                                    </th>
+                                    <th className="px-5 py-3 font-medium">
+                                        Petugas
+                                    </th>
+                                    <th className="px-5 py-3 text-right font-medium">
+                                        Bunga
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y">
+                                {feeRincian.pageItems.length > 0 ? (
+                                    feeRincian.pageItems.map((e) => {
+                                        const meta =
+                                            e.kind === 'perpanjang'
+                                                ? STATUS_META.PERPANJANG
+                                                : STATUS_META.DIAMBIL;
+
+                                        return (
+                                            <tr
+                                                key={e.id}
+                                                className="transition-colors hover:bg-accent"
+                                            >
+                                                <td className="px-5 py-3 whitespace-nowrap text-muted-foreground tabular-nums">
+                                                    {formatDate(e.date)}
+                                                    {e.time
+                                                        ? ` · ${e.time}`
+                                                        : ''}
+                                                </td>
+                                                <td className="px-5 py-3">
+                                                    {e.code ? (
+                                                        <Link
+                                                            href={`/transaksi/${e.code}`}
+                                                            className="font-medium tabular-nums hover:text-primary hover:underline"
+                                                        >
+                                                            {e.code}
+                                                        </Link>
+                                                    ) : (
+                                                        '—'
+                                                    )}
+                                                </td>
+                                                <td className="px-5 py-3">
+                                                    {e.customer}
+                                                </td>
+                                                <td className="px-5 py-3">
+                                                    <span
+                                                        className={cn(
+                                                            'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset',
+                                                            meta.badge,
+                                                            meta.ring,
+                                                        )}
+                                                    >
+                                                        {e.kind ===
+                                                        'perpanjang'
+                                                            ? 'Perpanjang'
+                                                            : 'Tebus'}
+                                                    </span>
+                                                </td>
+                                                <td className="px-5 py-3">
+                                                    <PetugasLink
+                                                        name={e.clerk}
+                                                    />
+                                                </td>
+                                                <td className="px-5 py-3 text-right font-medium text-primary tabular-nums">
+                                                    +{formatRupiah(e.amount)}
+                                                </td>
+                                            </tr>
+                                        );
+                                    })
+                                ) : (
+                                    <tr>
+                                        <td
+                                            colSpan={6}
+                                            className="px-5 py-10 text-center text-muted-foreground"
+                                        >
+                                            Belum ada pembayaran biaya pada
+                                            periode ini.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                    {feeIncome.entries.length > 0 && (
+                        <TablePagination
+                            page={feeRincian.page}
+                            totalPages={feeRincian.totalPages}
+                            pageSize={feeRincian.pageSize}
+                            total={feeRincian.total}
+                            from={feeRincian.from}
+                            to={feeRincian.to}
+                            onPageChange={feeRincian.setPage}
+                            onPageSizeChange={feeRincian.setPageSize}
+                        />
+                    )}
+                </section>
 
                 {/* Grafik harian */}
                 <section className="rounded-xl border bg-card p-5 shadow-sm sm:p-6">

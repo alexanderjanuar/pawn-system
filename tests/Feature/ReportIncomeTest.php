@@ -37,7 +37,11 @@ test('report income sums extension fees and redemption interest by payment date'
         ->assertInertia(fn (Assert $page) => $page
             ->where('feeIncome.perpanjang', 120_000)
             ->where('feeIncome.tebus', 120_000) // 920k - 800k pokok
-            ->where('feeIncome.total', 240_000),
+            ->where('feeIncome.total', 240_000)
+            // Two payment rows (extend + redeem); the disbursement is not income.
+            ->has('feeIncome.entries', 2)
+            ->where('feeIncome.entries.0.kind', 'tebus') // newest first (20 Aug)
+            ->where('feeIncome.entries.0.amount', 120_000),
         );
 });
 

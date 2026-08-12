@@ -176,8 +176,7 @@ class LaporanController extends Controller
     {
         return TransactionEvent::query()
             ->whereHas('transaction', fn ($q) => $q->forActiveStore())
-            ->whereIn('type', ['extended', 'redeemed'])
-            ->with('transaction:id,principal');
+            ->whereIn('type', ['extended', 'redeemed']);
     }
 
     /**
@@ -195,16 +194,22 @@ class LaporanController extends Controller
 
     /**
      * Interest (biaya titipan) actually collected between two dates, counted on
-     * the day it was paid and split by source (extension vs redemption). An
-     * empty bound means unbounded.
+     * the day it was paid and split by source (extension vs redemption), plus
+     * the itemised payments behind it. An empty bound means unbounded.
      *
-     * @return array{perpanjang: int, tebus: int, total: int}
+     * @return array{
+     *     perpanjang: int, tebus: int, total: int,
+     *     entries: array<int, array{id: int, code: string|null, customer: string, kind: string, amount: int, date: string, time: string|null, clerk: string}>
+     * }
      */
     private function feeIncome(string $from, string $to): array
     {
         $events = $this->feeIncomeEvents()
+            ->with(['transaction:id,code,principal,clerk', 'transaction.customer:id,name'])
             ->when($from !== '', fn ($q) => $q->whereDate('event_date', '>=', $from))
             ->when($to !== '', fn ($q) => $q->whereDate('event_date', '<=', $to))
+            ->orderByDesc('event_date')
+            ->orderByDesc('id')
             ->get();
 
         $perpanjang = (int) $events->where('type', 'extended')
@@ -212,10 +217,22 @@ class LaporanController extends Controller
         $tebus = (int) $events->where('type', 'redeemed')
             ->sum(fn (TransactionEvent $event) => $this->eventInterest($event));
 
+        $entries = $events->map(fn (TransactionEvent $event) => [
+            'id' => $event->id,
+            'code' => $event->transaction?->code,
+            'customer' => $event->transaction?->customer?->name ?? '—',
+            'kind' => $event->type === 'extended' ? 'perpanjang' : 'tebus',
+            'amount' => $this->eventInterest($event),
+            'date' => $event->event_date->format('Y-m-d'),
+            'time' => $event->created_at?->format('H.i'),
+            'clerk' => $event->by ?: ($event->transaction?->clerk ?? '—'),
+        ])->all();
+
         return [
             'perpanjang' => $perpanjang,
             'tebus' => $tebus,
             'total' => $perpanjang + $tebus,
+            'entries' => $entries,
         ];
     }
 
@@ -231,6 +248,7 @@ class LaporanController extends Controller
         $byMonth = [];
 
         $this->feeIncomeEvents()
+            ->with('transaction:id,principal')
             ->whereDate('event_date', '>=', $start->toDateString())
             ->get()
             ->each(function (TransactionEvent $event) use (&$byMonth) {

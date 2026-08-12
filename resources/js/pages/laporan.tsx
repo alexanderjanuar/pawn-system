@@ -15,6 +15,7 @@ import { useMemo, useState } from 'react';
 import { BarChart } from '@/components/gadai/bar-chart';
 import { DateRangeFilter } from '@/components/gadai/date-range-filter';
 import { DonutChart } from '@/components/gadai/donut-chart';
+import { IncomeInfo } from '@/components/gadai/income-info';
 import { PageHeader } from '@/components/gadai/page-header';
 import { PetugasLink } from '@/components/petugas-link';
 import { StatusBadge } from '@/components/status-badge';
@@ -242,8 +243,9 @@ export default function Laporan({
                                 (i === 2 || i === 3) && 'lg:border-l',
                             )}
                         >
-                            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                            <span className="flex items-center gap-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
                                 {k.label}
+                                {k.label === 'Pemasukan Biaya' && <IncomeInfo />}
                             </span>
                             <span
                                 className={cn(
@@ -268,6 +270,7 @@ export default function Laporan({
                                 <h2 className="flex items-center gap-2 font-semibold">
                                     <TrendingUp className="size-4 text-primary" />
                                     Pemasukan Biaya Titipan
+                                    <IncomeInfo />
                                 </h2>
                                 <p className="text-xs text-muted-foreground">
                                     Biaya titipan · 6 bulan terakhir

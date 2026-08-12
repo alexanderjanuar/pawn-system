@@ -38,6 +38,7 @@ import type { Transaction } from '@/types/gadai';
 
 type Period = { from: string; to: string };
 type TrendPoint = { label: string; value: number; current: boolean };
+type FeeIncome = { perpanjang: number; tebus: number; total: number };
 type Overview = {
     uangBeredar: number;
     barangAktif: number;
@@ -58,7 +59,7 @@ export default function Laporan({
     trend: TrendPoint[];
     dailyTrend: TrendPoint[];
     overview: Overview;
-    feeIncome: number;
+    feeIncome: FeeIncome;
 }) {
     const report = useMemo(() => buildReport(transactions), [transactions]);
 
@@ -132,8 +133,8 @@ export default function Laporan({
         },
         {
             label: 'Pemasukan Biaya',
-            value: formatRupiah(feeIncome),
-            hint: 'bunga dibayar periode ini (termasuk perpanjang)',
+            value: formatRupiah(feeIncome.total),
+            hint: `Perpanjang ${formatRupiah(feeIncome.perpanjang)} · Tebus ${formatRupiah(feeIncome.tebus)}`,
             tone: 'text-primary',
         },
         {
@@ -278,10 +279,12 @@ export default function Laporan({
                             </div>
                             <div className="text-right">
                                 <p className="text-lg font-semibold text-primary tabular-nums">
-                                    {formatRupiah(feeIncome)}
+                                    {formatRupiah(feeIncome.total)}
                                 </p>
                                 <p className="text-xs text-muted-foreground">
-                                    periode ini
+                                    periode ini · Perpanjang{' '}
+                                    {formatRupiah(feeIncome.perpanjang)} · Tebus{' '}
+                                    {formatRupiah(feeIncome.tebus)}
                                 </p>
                             </div>
                         </div>

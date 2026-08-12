@@ -27,7 +27,7 @@ class LaporanController extends Controller
             'trend' => $this->feeTrend(),
             'dailyTrend' => $this->dailyTrend(),
             'overview' => $this->overview(),
-            'feeIncome' => $this->feeIncomeBetween($from, $to),
+            'feeIncome' => $this->feeIncome($from, $to),
         ]);
     }
 
@@ -194,17 +194,29 @@ class LaporanController extends Controller
     }
 
     /**
-     * Total interest (biaya titipan) actually collected between two dates,
-     * counted on the day it was paid. Includes every extension. An empty
-     * bound means unbounded.
+     * Interest (biaya titipan) actually collected between two dates, counted on
+     * the day it was paid and split by source (extension vs redemption). An
+     * empty bound means unbounded.
+     *
+     * @return array{perpanjang: int, tebus: int, total: int}
      */
-    private function feeIncomeBetween(string $from, string $to): int
+    private function feeIncome(string $from, string $to): array
     {
-        return (int) $this->feeIncomeEvents()
+        $events = $this->feeIncomeEvents()
             ->when($from !== '', fn ($q) => $q->whereDate('event_date', '>=', $from))
             ->when($to !== '', fn ($q) => $q->whereDate('event_date', '<=', $to))
-            ->get()
+            ->get();
+
+        $perpanjang = (int) $events->where('type', 'extended')
             ->sum(fn (TransactionEvent $event) => $this->eventInterest($event));
+        $tebus = (int) $events->where('type', 'redeemed')
+            ->sum(fn (TransactionEvent $event) => $this->eventInterest($event));
+
+        return [
+            'perpanjang' => $perpanjang,
+            'tebus' => $tebus,
+            'total' => $perpanjang + $tebus,
+        ];
     }
 
     /**

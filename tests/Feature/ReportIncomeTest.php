@@ -35,7 +35,9 @@ test('report income sums extension fees and redemption interest by payment date'
     $this->actingAs(User::factory()->owner()->create())
         ->get('/laporan?from=2026-08-01&to=2026-08-31')
         ->assertInertia(fn (Assert $page) => $page
-            ->where('feeIncome', 240_000), // 120k extend + (920k - 800k) redeem
+            ->where('feeIncome.perpanjang', 120_000)
+            ->where('feeIncome.tebus', 120_000) // 920k - 800k pokok
+            ->where('feeIncome.total', 240_000),
         );
 });
 
@@ -49,6 +51,7 @@ test('report income excludes payments made outside the period', function () {
     $this->actingAs(User::factory()->owner()->create())
         ->get('/laporan?from=2026-08-01&to=2026-08-31')
         ->assertInertia(fn (Assert $page) => $page
-            ->where('feeIncome', 120_000), // July extension excluded
+            ->where('feeIncome.perpanjang', 120_000) // July extension excluded
+            ->where('feeIncome.total', 120_000),
         );
 });

@@ -50,6 +50,11 @@ export function IncomeInfo() {
                     kembali. Bunga tiap periode dihitung sekali, jadi tanpa dobel
                     hitung.
                 </p>
+                <p className="mt-2 text-xs text-muted-foreground">
+                    Angka ini bisa lebih besar dari Dana Tersalurkan karena
+                    menghitung bunga dari semua transaksi yang bayar di periode
+                    ini (termasuk perpanjang gadai lama), bukan cuma gadai baru.
+                </p>
             </PopoverContent>
         </Popover>
     );

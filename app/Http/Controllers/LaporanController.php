@@ -26,7 +26,6 @@ class LaporanController extends Controller
             'trend' => $this->feeTrend(),
             'dailyTrend' => $this->dailyTrend(),
             'overview' => $this->overview(),
-            'cashFlow' => $this->cashFlow($from, $to),
         ]);
     }
 

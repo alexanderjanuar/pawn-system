@@ -13,8 +13,6 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { BarChart } from '@/components/gadai/bar-chart';
-import type { CashFlow } from '@/components/gadai/cash-flow-panel';
-import { CashFlowPanel } from '@/components/gadai/cash-flow-panel';
 import { DateRangeFilter } from '@/components/gadai/date-range-filter';
 import { DonutChart } from '@/components/gadai/donut-chart';
 import { PageHeader } from '@/components/gadai/page-header';
@@ -52,14 +50,12 @@ export default function Laporan({
     trend,
     dailyTrend,
     overview,
-    cashFlow,
 }: {
     transactions: Transaction[];
     period: Period;
     trend: TrendPoint[];
     dailyTrend: TrendPoint[];
     overview: Overview;
-    cashFlow: CashFlow;
 }) {
     const report = useMemo(() => buildReport(transactions), [transactions]);
 
@@ -261,12 +257,6 @@ export default function Laporan({
                         </div>
                     ))}
                 </div>
-
-                {/* Kas periode: rekonsiliasi uang masuk & keluar vs fisik */}
-                <CashFlowPanel
-                    cashFlow={cashFlow}
-                    periodLabel={periodLabel}
-                />
 
                 <div className="grid gap-5 lg:grid-cols-5">
                     {/* Fee income + trend */}

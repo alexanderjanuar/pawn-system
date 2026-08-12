@@ -229,6 +229,16 @@ class GadaiController extends Controller
         $terms = $this->terms($data);
         $startDate = Carbon::parse($data['start_date']);
 
+        // An extended loan's schedule is owned by Perpanjang. Editing it (e.g.
+        // to fix the rack) must never recompute the due date from
+        // start_date + tenor, which would wrongly revert it to the
+        // pre-extension due date and make it look overdue again.
+        $extended = $transaction->extensions > 0;
+        $tenorDays = $extended ? $transaction->tenor_days : $terms['days'];
+        $dueDate = $extended
+            ? $transaction->due_date
+            : $startDate->copy()->addDays($terms['days']);
+
         $clerk = ($data['clerk'] ?? '') ?: $transaction->clerk;
         $rakId = $data['rak_id'] ?? null;
         $newRakName = $rakId ? (Rak::find($rakId)?->name ?? '—') : '—';
@@ -262,11 +272,11 @@ class GadaiController extends Controller
             'clerk' => $clerk,
             'rak_id' => $rakId,
             'principal' => $terms['principal'],
-            'tenor_days' => $terms['days'],
+            'tenor_days' => $tenorDays,
             'fee_percent' => $terms['percent'],
             'fee' => $terms['fee'],
             'start_date' => $startDate,
-            'due_date' => $startDate->copy()->addDays($terms['days']),
+            'due_date' => $dueDate,
             'notes' => $data['notes'] ?? null,
             'photos' => array_values(array_merge(
                 $transaction->photos ?? [],
@@ -282,7 +292,7 @@ class GadaiController extends Controller
             'Dana titipan' => $this->rupiah($terms['principal']),
             'Biaya titipan' => $this->rupiah($terms['fee']),
             'Status' => $data['status'],
-            'Jangka waktu' => $terms['days'].' hari',
+            'Jangka waktu' => $tenorDays.' hari',
             'Nama HP' => $data['device_name'],
             'Tanggal masuk' => $startDate->format('Y-m-d'),
         ];

@@ -112,12 +112,13 @@ test('the kas page defaults to today', function () {
         );
 });
 
-test('the full report carries cash flow for management but stays closed to petugas', function () {
+test('the full report no longer carries cash flow and stays closed to petugas', function () {
     $this->actingAs(User::factory()->petugas()->create())
         ->get('/laporan')
         ->assertForbidden();
 
+    // Cash reconciliation now lives on its own /kas page, not the report.
     $this->actingAs(User::factory()->owner()->create())
         ->get('/laporan?from=2026-08-01&to=2026-08-31')
-        ->assertInertia(fn (Assert $page) => $page->has('cashFlow'));
+        ->assertInertia(fn (Assert $page) => $page->missing('cashFlow'));
 });

@@ -1034,7 +1034,7 @@ function PerpanjangDialog({ tx }: { tx: Transaction }) {
                         >
                             <span className="font-medium">15 Hari</span>
                             <span className="text-xs text-muted-foreground">
-                                biaya {tx.feePercent}%
+                                s/d {formatDate(addDays(tx.dueDate, 15))}
                             </span>
                         </ToggleGroupItem>
                         <ToggleGroupItem
@@ -1043,7 +1043,7 @@ function PerpanjangDialog({ tx }: { tx: Transaction }) {
                         >
                             <span className="font-medium">30 Hari</span>
                             <span className="text-xs text-muted-foreground">
-                                biaya {tx.feePercent}%
+                                s/d {formatDate(addDays(tx.dueDate, 30))}
                             </span>
                         </ToggleGroupItem>
                         <ToggleGroupItem

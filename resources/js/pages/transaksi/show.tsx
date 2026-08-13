@@ -20,6 +20,7 @@ import {
     ShieldCheck,
     Smartphone,
     Trash2,
+    Undo2,
     Wallet,
     X,
 } from 'lucide-react';
@@ -90,6 +91,7 @@ export default function TransaksiShow({
     const [saleOpen, setSaleOpen] = useState(false);
     const [lelangOpen, setLelangOpen] = useState(false);
     const [revertOpen, setRevertOpen] = useState(false);
+    const [revertExtendOpen, setRevertExtendOpen] = useState(false);
     const [tidakDiambilOpen, setTidakDiambilOpen] = useState(false);
 
     const lelang = tx.status === 'LELANG';
@@ -138,6 +140,12 @@ export default function TransaksiShow({
                 preserveScroll: true,
                 onSuccess: () => setTidakDiambilOpen(false),
             },
+        );
+    const revertExtend = () =>
+        router.post(
+            `/transaksi/${tx.id}/perpanjang/batal`,
+            {},
+            { preserveScroll: true, onSuccess: () => setRevertExtendOpen(false) },
         );
 
     return (
@@ -208,6 +216,16 @@ export default function TransaksiShow({
                                             Edit transaksi
                                         </Link>
                                     </DropdownMenuItem>
+                                    {running && tx.extensions > 0 && (
+                                        <DropdownMenuItem
+                                            onSelect={() =>
+                                                setRevertExtendOpen(true)
+                                            }
+                                        >
+                                            <Undo2 />
+                                            Batal Perpanjang
+                                        </DropdownMenuItem>
+                                    )}
                                     {running && !notRedeemed && (
                                         <DropdownMenuItem
                                             onSelect={() =>
@@ -261,6 +279,15 @@ export default function TransaksiShow({
                         confirmLabel="Batal Lelang"
                         onConfirm={revertLelang}
                         icon={<RefreshCw />}
+                    />
+                    <ConfirmDialog
+                        open={revertExtendOpen}
+                        onOpenChange={setRevertExtendOpen}
+                        title="Batalkan Perpanjangan Terakhir?"
+                        description={`Perpanjangan terakhir ${tx.id} dibatalkan. Jatuh tempo kembali ke ${formatDate(addDays(tx.dueDate, -tx.tenorDays))} dan biaya ${formatRupiah(tx.fee)} dihapus dari pendapatan & kas.`}
+                        confirmLabel="Batalkan Perpanjangan"
+                        onConfirm={revertExtend}
+                        icon={<Undo2 />}
                     />
                     <ConfirmDialog
                         open={tidakDiambilOpen}

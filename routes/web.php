@@ -57,6 +57,7 @@ Route::middleware(['auth', 'active-store'])->group(function () {
     // Tebus (redeem & take) + Perpanjang (extend)
     Route::post('transaksi/{transaction}/tebus', [GadaiController::class, 'redeem'])->name('transaksi.redeem');
     Route::post('transaksi/{transaction}/perpanjang', [GadaiController::class, 'extend'])->name('transaksi.extend');
+    Route::post('transaksi/{transaction}/perpanjang/batal', [GadaiController::class, 'revertExtend'])->name('transaksi.extend.revert');
 
     // Pengingat WhatsApp ke pelanggan
     Route::post('transaksi/{transaction}/ingatkan', [GadaiController::class, 'remind'])->name('transaksi.remind');

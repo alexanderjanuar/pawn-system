@@ -440,6 +440,49 @@ class GadaiController extends Controller
         return back()->with('success', "Gadai {$transaction->code} diperpanjang s/d ".$newDue->format('d M Y').'.');
     }
 
+    /**
+     * Undo the most recent extension (e.g. an accidental double perpanjang):
+     * roll the due date back by the last period, drop the extension count, and
+     * remove its payment record so it no longer counts as income or cash.
+     */
+    public function revertExtend(Request $request, Transaction $transaction): RedirectResponse
+    {
+        if ($transaction->extensions < 1) {
+            return back()->with('error', 'Transaksi ini tidak punya perpanjangan untuk dibatalkan.');
+        }
+
+        if (in_array($transaction->status, ['DIAMBIL', 'LELANG'], true)) {
+            return back()->with('error', 'Perpanjangan tidak bisa dibatalkan pada transaksi yang sudah diambil atau lelang.');
+        }
+
+        // tenor_days always holds the most recent extension's length, so this
+        // exactly reverses the last perpanjang.
+        $previousDue = $transaction->due_date->copy()->subDays($transaction->tenor_days);
+        $remaining = $transaction->extensions - 1;
+
+        $transaction->events()
+            ->where('type', 'extended')
+            ->latest('id')
+            ->first()
+            ?->delete();
+
+        $transaction->update([
+            'due_date' => $previousDue,
+            'extensions' => $remaining,
+            'status' => $remaining === 0 ? 'AKTIF' : 'PERPANJANG',
+        ]);
+
+        ActivityLog::record(
+            'updated',
+            'transaction',
+            $transaction->code,
+            $transaction->customer->name,
+            'Membatalkan perpanjangan (jatuh tempo kembali ke '.$previousDue->format('Y-m-d').')',
+        );
+
+        return back()->with('success', "Perpanjangan {$transaction->code} dibatalkan.");
+    }
+
     public function remind(Request $request, Transaction $transaction): RedirectResponse
     {
         $data = $request->validate([

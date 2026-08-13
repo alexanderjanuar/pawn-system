@@ -93,7 +93,7 @@ export default function TransaksiShow({
     const [lelangOpen, setLelangOpen] = useState(false);
     const [revertOpen, setRevertOpen] = useState(false);
     const [revertExtendOpen, setRevertExtendOpen] = useState(false);
-    const [adjustDueOpen, setAdjustDueOpen] = useState(false);
+    const [editExtendOpen, setEditExtendOpen] = useState(false);
     const [tidakDiambilOpen, setTidakDiambilOpen] = useState(false);
 
     const lelang = tx.status === 'LELANG';
@@ -221,21 +221,21 @@ export default function TransaksiShow({
                                     {running && tx.extensions > 0 && (
                                         <DropdownMenuItem
                                             onSelect={() =>
+                                                setEditExtendOpen(true)
+                                            }
+                                        >
+                                            <CalendarClock />
+                                            Edit Perpanjang
+                                        </DropdownMenuItem>
+                                    )}
+                                    {running && tx.extensions > 0 && (
+                                        <DropdownMenuItem
+                                            onSelect={() =>
                                                 setRevertExtendOpen(true)
                                             }
                                         >
                                             <Undo2 />
                                             Batal Perpanjang
-                                        </DropdownMenuItem>
-                                    )}
-                                    {running && (
-                                        <DropdownMenuItem
-                                            onSelect={() =>
-                                                setAdjustDueOpen(true)
-                                            }
-                                        >
-                                            <CalendarClock />
-                                            Koreksi Jatuh Tempo
                                         </DropdownMenuItem>
                                     )}
                                     {running && !notRedeemed && (
@@ -315,10 +315,10 @@ export default function TransaksiShow({
                         open={saleOpen}
                         onOpenChange={setSaleOpen}
                     />
-                    <AdjustDueDateDialog
+                    <EditExtendDialog
                         tx={tx}
-                        open={adjustDueOpen}
-                        onOpenChange={setAdjustDueOpen}
+                        open={editExtendOpen}
+                        onOpenChange={setEditExtendOpen}
                     />
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                         <StatusBadge
@@ -976,7 +976,7 @@ function DeleteTransactionDialog({
     );
 }
 
-function AdjustDueDateDialog({
+function EditExtendDialog({
     tx,
     open,
     onOpenChange,
@@ -987,10 +987,11 @@ function AdjustDueDateDialog({
 }) {
     const { data, setData, post, processing, errors, reset } = useForm({
         due_date: tx.dueDate,
+        fee: tx.fee,
     });
 
     const submit = () =>
-        post(`/transaksi/${tx.id}/jatuh-tempo`, {
+        post(`/transaksi/${tx.id}/perpanjang/edit`, {
             preserveScroll: true,
             onSuccess: () => onOpenChange(false),
         });
@@ -1008,26 +1009,61 @@ function AdjustDueDateDialog({
         >
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Koreksi Jatuh Tempo</DialogTitle>
+                    <DialogTitle>Edit Perpanjangan</DialogTitle>
                     <DialogDescription>
-                        Membetulkan tanggal jatuh tempo tanpa mencatat
-                        pembayaran baru. Tidak memengaruhi pendapatan maupun Kas
-                        Harian.
+                        Betulkan perpanjangan terakhir tanpa membuat pembayaran
+                        baru. Pembayaran tetap di tanggal aslinya, jadi Kas
+                        Harian & pendapatan tidak pindah atau dobel.
                     </DialogDescription>
                 </DialogHeader>
 
-                <div className="grid gap-1.5">
-                    <Label htmlFor="new-due">Jatuh tempo baru</Label>
-                    <DatePicker
-                        id="new-due"
-                        value={data.due_date}
-                        onChange={(v) => setData('due_date', v)}
-                    />
-                    {errors.due_date && (
-                        <p className="text-xs text-destructive">
-                            {errors.due_date}
-                        </p>
-                    )}
+                <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="grid gap-1.5">
+                        <Label htmlFor="edit-due">Jatuh tempo</Label>
+                        <DatePicker
+                            id="edit-due"
+                            value={data.due_date}
+                            onChange={(v) => setData('due_date', v)}
+                        />
+                        {errors.due_date && (
+                            <p className="text-xs text-destructive">
+                                {errors.due_date}
+                            </p>
+                        )}
+                    </div>
+                    <div className="grid gap-1.5">
+                        <Label htmlFor="edit-fee">Biaya titipan</Label>
+                        <div className="relative">
+                            <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
+                                Rp
+                            </span>
+                            <Input
+                                id="edit-fee"
+                                inputMode="numeric"
+                                value={
+                                    data.fee
+                                        ? data.fee.toLocaleString('id-ID')
+                                        : ''
+                                }
+                                onChange={(e) =>
+                                    setData(
+                                        'fee',
+                                        parseInt(
+                                            e.target.value.replace(/\D/g, ''),
+                                            10,
+                                        ) || 0,
+                                    )
+                                }
+                                placeholder="0"
+                                className="pl-9 tabular-nums"
+                            />
+                        </div>
+                        {errors.fee && (
+                            <p className="text-xs text-destructive">
+                                {errors.fee}
+                            </p>
+                        )}
+                    </div>
                 </div>
 
                 <dl className="space-y-2 rounded-lg border bg-muted/30 p-4 text-sm">
@@ -1046,12 +1082,9 @@ function AdjustDueDateDialog({
                     <DialogClose asChild>
                         <Button variant="outline">Batal</Button>
                     </DialogClose>
-                    <Button
-                        onClick={submit}
-                        disabled={processing || data.due_date === tx.dueDate}
-                    >
+                    <Button onClick={submit} disabled={processing}>
                         <CalendarClock />
-                        Simpan
+                        Simpan Perubahan
                     </Button>
                 </DialogFooter>
             </DialogContent>

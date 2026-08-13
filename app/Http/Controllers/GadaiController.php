@@ -484,39 +484,62 @@ class GadaiController extends Controller
     }
 
     /**
-     * Correct only the due date of a running loan (e.g. a perpanjang recorded
-     * with the wrong length). No payment is created, so it never touches income
-     * or the daily cash. The current period's start stays fixed; only its end
-     * (and therefore the period length) moves.
+     * Edit the most recent extension in place (e.g. a perpanjang recorded with
+     * the wrong length or fee) instead of cancel-and-redo. The extension's
+     * payment record keeps its original date & method, so income and the daily
+     * cash stay on the right day and are never doubled. The current period's
+     * start stays fixed; only its end (and length) moves.
      */
-    public function adjustDueDate(Request $request, Transaction $transaction): RedirectResponse
+    public function editExtend(Request $request, Transaction $transaction): RedirectResponse
     {
+        if ($transaction->extensions < 1) {
+            return back()->with('error', 'Transaksi ini belum pernah diperpanjang.');
+        }
+
         if (in_array($transaction->status, ['DIAMBIL', 'LELANG'], true)) {
-            return back()->with('error', 'Jatuh tempo tidak bisa diubah pada transaksi yang sudah diambil atau lelang.');
+            return back()->with('error', 'Perpanjangan tidak bisa diedit pada transaksi yang sudah diambil atau lelang.');
         }
 
         $data = $request->validate([
             'due_date' => ['required', 'date', 'after:'.$transaction->start_date->toDateString()],
+            'fee' => ['required', 'integer', 'min:0'],
         ]);
 
+        $principal = $transaction->principal;
         $oldDue = $transaction->due_date;
         $newDue = Carbon::parse($data['due_date']);
+        $fee = (int) $data['fee'];
+        $percent = $principal > 0 ? (int) round($fee / $principal * 100) : 0;
         $currentPeriodStart = $oldDue->copy()->subDays($transaction->tenor_days);
 
         $transaction->update([
             'due_date' => $newDue,
             'tenor_days' => max(1, (int) $currentPeriodStart->diffInDays($newDue)),
+            'fee' => $fee,
+            'fee_percent' => $percent,
         ]);
+
+        // Correct the existing extension record in place; keep its event_date
+        // and payment_method so the cash/income stay on the original day.
+        $transaction->events()
+            ->where('type', 'extended')
+            ->latest('id')
+            ->first()
+            ?->update([
+                'title' => 'Diperpanjang s/d '.$newDue->format('d M Y'),
+                'note' => 'Biaya titipan '.$this->rupiah($fee).' dibayar.',
+                'amount' => $fee,
+            ]);
 
         ActivityLog::record(
             'updated',
             'transaction',
             $transaction->code,
             $transaction->customer->name,
-            'Mengoreksi jatuh tempo: '.$oldDue->format('Y-m-d').' → '.$newDue->format('Y-m-d'),
+            'Mengedit perpanjangan (s/d '.$newDue->format('Y-m-d').', biaya '.$this->rupiah($fee).')',
         );
 
-        return back()->with('success', "Jatuh tempo {$transaction->code} diubah ke ".$newDue->format('d M Y').'.');
+        return back()->with('success', "Perpanjangan {$transaction->code} diperbarui.");
     }
 
     public function remind(Request $request, Transaction $transaction): RedirectResponse

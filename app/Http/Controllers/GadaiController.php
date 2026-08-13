@@ -483,6 +483,42 @@ class GadaiController extends Controller
         return back()->with('success', "Perpanjangan {$transaction->code} dibatalkan.");
     }
 
+    /**
+     * Correct only the due date of a running loan (e.g. a perpanjang recorded
+     * with the wrong length). No payment is created, so it never touches income
+     * or the daily cash. The current period's start stays fixed; only its end
+     * (and therefore the period length) moves.
+     */
+    public function adjustDueDate(Request $request, Transaction $transaction): RedirectResponse
+    {
+        if (in_array($transaction->status, ['DIAMBIL', 'LELANG'], true)) {
+            return back()->with('error', 'Jatuh tempo tidak bisa diubah pada transaksi yang sudah diambil atau lelang.');
+        }
+
+        $data = $request->validate([
+            'due_date' => ['required', 'date', 'after:'.$transaction->start_date->toDateString()],
+        ]);
+
+        $oldDue = $transaction->due_date;
+        $newDue = Carbon::parse($data['due_date']);
+        $currentPeriodStart = $oldDue->copy()->subDays($transaction->tenor_days);
+
+        $transaction->update([
+            'due_date' => $newDue,
+            'tenor_days' => max(1, (int) $currentPeriodStart->diffInDays($newDue)),
+        ]);
+
+        ActivityLog::record(
+            'updated',
+            'transaction',
+            $transaction->code,
+            $transaction->customer->name,
+            'Mengoreksi jatuh tempo: '.$oldDue->format('Y-m-d').' → '.$newDue->format('Y-m-d'),
+        );
+
+        return back()->with('success', "Jatuh tempo {$transaction->code} diubah ke ".$newDue->format('d M Y').'.');
+    }
+
     public function remind(Request $request, Transaction $transaction): RedirectResponse
     {
         $data = $request->validate([

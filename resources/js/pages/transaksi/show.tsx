@@ -4,6 +4,7 @@ import {
     ArrowLeft,
     Banknote,
     Boxes,
+    CalendarClock,
     Check,
     Coins,
     Gavel,
@@ -92,6 +93,7 @@ export default function TransaksiShow({
     const [lelangOpen, setLelangOpen] = useState(false);
     const [revertOpen, setRevertOpen] = useState(false);
     const [revertExtendOpen, setRevertExtendOpen] = useState(false);
+    const [adjustDueOpen, setAdjustDueOpen] = useState(false);
     const [tidakDiambilOpen, setTidakDiambilOpen] = useState(false);
 
     const lelang = tx.status === 'LELANG';
@@ -226,6 +228,16 @@ export default function TransaksiShow({
                                             Batal Perpanjang
                                         </DropdownMenuItem>
                                     )}
+                                    {running && (
+                                        <DropdownMenuItem
+                                            onSelect={() =>
+                                                setAdjustDueOpen(true)
+                                            }
+                                        >
+                                            <CalendarClock />
+                                            Koreksi Jatuh Tempo
+                                        </DropdownMenuItem>
+                                    )}
                                     {running && !notRedeemed && (
                                         <DropdownMenuItem
                                             onSelect={() =>
@@ -302,6 +314,11 @@ export default function TransaksiShow({
                         tx={tx}
                         open={saleOpen}
                         onOpenChange={setSaleOpen}
+                    />
+                    <AdjustDueDateDialog
+                        tx={tx}
+                        open={adjustDueOpen}
+                        onOpenChange={setAdjustDueOpen}
                     />
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                         <StatusBadge
@@ -952,6 +969,89 @@ function DeleteTransactionDialog({
                     >
                         <Trash2 />
                         Hapus Transaksi
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function AdjustDueDateDialog({
+    tx,
+    open,
+    onOpenChange,
+}: {
+    tx: Transaction;
+    open: boolean;
+    onOpenChange: (value: boolean) => void;
+}) {
+    const { data, setData, post, processing, errors, reset } = useForm({
+        due_date: tx.dueDate,
+    });
+
+    const submit = () =>
+        post(`/transaksi/${tx.id}/jatuh-tempo`, {
+            preserveScroll: true,
+            onSuccess: () => onOpenChange(false),
+        });
+
+    return (
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                onOpenChange(next);
+
+                if (!next) {
+                    reset();
+                }
+            }}
+        >
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Koreksi Jatuh Tempo</DialogTitle>
+                    <DialogDescription>
+                        Membetulkan tanggal jatuh tempo tanpa mencatat
+                        pembayaran baru. Tidak memengaruhi pendapatan maupun Kas
+                        Harian.
+                    </DialogDescription>
+                </DialogHeader>
+
+                <div className="grid gap-1.5">
+                    <Label htmlFor="new-due">Jatuh tempo baru</Label>
+                    <DatePicker
+                        id="new-due"
+                        value={data.due_date}
+                        onChange={(v) => setData('due_date', v)}
+                    />
+                    {errors.due_date && (
+                        <p className="text-xs text-destructive">
+                            {errors.due_date}
+                        </p>
+                    )}
+                </div>
+
+                <dl className="space-y-2 rounded-lg border bg-muted/30 p-4 text-sm">
+                    <Row
+                        label="Jatuh tempo saat ini"
+                        value={formatDate(tx.dueDate)}
+                    />
+                    <Row
+                        label="Jatuh tempo baru"
+                        value={formatDate(data.due_date)}
+                        strong
+                    />
+                </dl>
+
+                <DialogFooter>
+                    <DialogClose asChild>
+                        <Button variant="outline">Batal</Button>
+                    </DialogClose>
+                    <Button
+                        onClick={submit}
+                        disabled={processing || data.due_date === tx.dueDate}
+                    >
+                        <CalendarClock />
+                        Simpan
                     </Button>
                 </DialogFooter>
             </DialogContent>

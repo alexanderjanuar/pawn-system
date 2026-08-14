@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\CashAnchor;
 use App\Models\Customer;
 use App\Models\Transaction;
 use App\Models\User;
@@ -19,10 +20,12 @@ test('the kas export streams a CSV with itemised movements and totals', function
         ['type' => 'created', 'event_date' => '2026-08-13', 'title' => 'Gadai masuk', 'by' => 'Atul', 'amount' => 200_000],
         ['type' => 'extended', 'event_date' => '2026-08-13', 'title' => 'Diperpanjang', 'by' => 'Atul', 'amount' => 225_000, 'payment_method' => 'transfer'],
     ]);
+    // Persisted opening cash balance for the day.
+    CashAnchor::create(['store_id' => null, 'anchor_date' => '2026-08-13', 'amount' => 10_000_000]);
 
     // Default factory user is a petugas — they may export the daily cash.
     $response = $this->actingAs(User::factory()->create())
-        ->get('/kas/export?from=2026-08-13&to=2026-08-13&saldo=10000000&shop=Gulam+Cell');
+        ->get('/kas/export?from=2026-08-13&to=2026-08-13&shop=Gulam+Cell');
 
     $response->assertOk();
     $response->assertHeader('content-type', 'application/vnd.ms-excel; charset=UTF-8');

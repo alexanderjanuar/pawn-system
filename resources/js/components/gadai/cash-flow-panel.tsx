@@ -1,8 +1,23 @@
 import { Link, router } from '@inertiajs/react';
-import { ArrowLeftRight, Banknote, Landmark } from 'lucide-react';
+import {
+    ArrowLeftRight,
+    Banknote,
+    Landmark,
+    Trash2,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { PetugasLink } from '@/components/petugas-link';
 import { TablePagination } from '@/components/table-pagination';
+import { Button } from '@/components/ui/button';
+import {
+    Dialog,
+    DialogClose,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import {
     Select,
     SelectContent,
@@ -15,11 +30,17 @@ import { usePagination } from '@/hooks/use-pagination';
 import { formatDate, formatRupiah } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
-export type CashKind = 'tebus' | 'perpanjang' | 'lelang' | 'pencairan';
+export type CashKind =
+    | 'tebus'
+    | 'perpanjang'
+    | 'lelang'
+    | 'pencairan'
+    | 'manual';
 export type PaymentMethod = 'cash' | 'transfer';
 export type CashEntry = {
     id: number;
-    code: string;
+    source: 'event' | 'manual';
+    code: string | null;
     customer: string;
     kind: CashKind;
     direction: 'in' | 'out';
@@ -34,12 +55,13 @@ export type CashFlow = {
         tebus: number;
         perpanjang: number;
         lelang: number;
+        manual: number;
         cash: number;
         transfer: number;
         unset: number;
         total: number;
     };
-    out: { pencairan: number; total: number };
+    out: { pencairan: number; manual: number; total: number };
     net: number;
     entries: CashEntry[];
 };
@@ -49,6 +71,7 @@ const CASH_KIND_LABEL: Record<CashKind, string> = {
     perpanjang: 'Perpanjang',
     lelang: 'Lelang',
     pencairan: 'Pencairan',
+    manual: 'Manual',
 };
 
 /**
@@ -65,6 +88,7 @@ export function CashFlowPanel({
     title?: string;
 }) {
     const [view, setView] = useState<'all' | 'in' | 'out'>('all');
+    const [pendingDelete, setPendingDelete] = useState<CashEntry | null>(null);
     const filtered = useMemo(
         () =>
             view === 'all'
@@ -99,6 +123,9 @@ export function CashFlowPanel({
                         Tebus {formatRupiah(cashFlow.in.tebus)} · Perpanjang{' '}
                         {formatRupiah(cashFlow.in.perpanjang)} · Lelang{' '}
                         {formatRupiah(cashFlow.in.lelang)}
+                        {cashFlow.in.manual > 0 && (
+                            <> · Manual {formatRupiah(cashFlow.in.manual)}</>
+                        )}
                     </span>
                 </div>
                 <div className="flex flex-col gap-1 p-4 sm:p-5">
@@ -109,7 +136,10 @@ export function CashFlowPanel({
                         {formatRupiah(cashFlow.out.total)}
                     </span>
                     <span className="text-xs text-muted-foreground">
-                        pencairan gadai baru
+                        Pencairan {formatRupiah(cashFlow.out.pencairan)}
+                        {cashFlow.out.manual > 0 && (
+                            <> · Manual {formatRupiah(cashFlow.out.manual)}</>
+                        )}
                     </span>
                 </div>
                 <div className="flex flex-col gap-1 p-4 sm:p-5">
@@ -214,28 +244,38 @@ export function CashFlowPanel({
                                         {e.time ? ` · ${e.time}` : ''}
                                     </td>
                                     <td className="px-5 py-3">
-                                        <Link
-                                            href={`/transaksi/${e.code}`}
-                                            className="font-medium tabular-nums hover:text-primary hover:underline"
-                                        >
-                                            {e.code}
-                                        </Link>
+                                        {e.code ? (
+                                            <Link
+                                                href={`/transaksi/${e.code}`}
+                                                className="font-medium tabular-nums hover:text-primary hover:underline"
+                                            >
+                                                {e.code}
+                                            </Link>
+                                        ) : (
+                                            <span className="text-muted-foreground">
+                                                —
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-5 py-3">{e.customer}</td>
                                     <td className="px-5 py-3">
                                         <span
                                             className={cn(
                                                 'inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ring-1 ring-inset',
-                                                e.direction === 'in'
-                                                    ? 'bg-primary/10 text-primary ring-primary/20'
-                                                    : 'bg-overdue-soft text-overdue ring-overdue/25',
+                                                e.source === 'manual'
+                                                    ? 'bg-muted text-muted-foreground ring-border'
+                                                    : e.direction === 'in'
+                                                      ? 'bg-primary/10 text-primary ring-primary/20'
+                                                      : 'bg-overdue-soft text-overdue ring-overdue/25',
                                             )}
                                         >
                                             {CASH_KIND_LABEL[e.kind]}
                                         </span>
                                     </td>
                                     <td className="px-5 py-3">
-                                        {e.direction === 'in' ? (
+                                        {e.source === 'manual' ? (
+                                            <MethodLabel method={e.method} />
+                                        ) : e.direction === 'in' ? (
                                             <MethodSelect entry={e} />
                                         ) : (
                                             <span className="text-muted-foreground">
@@ -246,16 +286,35 @@ export function CashFlowPanel({
                                     <td className="px-5 py-3">
                                         <PetugasLink name={e.clerk} />
                                     </td>
-                                    <td
-                                        className={cn(
-                                            'px-5 py-3 text-right font-medium tabular-nums',
-                                            e.direction === 'in'
-                                                ? 'text-primary'
-                                                : 'text-overdue',
-                                        )}
-                                    >
-                                        {e.direction === 'in' ? '+' : '−'}
-                                        {formatRupiah(e.amount)}
+                                    <td className="px-5 py-3">
+                                        <div className="flex items-center justify-end gap-2">
+                                            <span
+                                                className={cn(
+                                                    'font-medium tabular-nums',
+                                                    e.direction === 'in'
+                                                        ? 'text-primary'
+                                                        : 'text-overdue',
+                                                )}
+                                            >
+                                                {e.direction === 'in'
+                                                    ? '+'
+                                                    : '−'}
+                                                {formatRupiah(e.amount)}
+                                            </span>
+                                            {e.source === 'manual' && (
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="size-7 text-muted-foreground hover:text-overdue"
+                                                    onClick={() =>
+                                                        setPendingDelete(e)
+                                                    }
+                                                    title="Hapus kas manual"
+                                                >
+                                                    <Trash2 className="size-4" />
+                                                </Button>
+                                            )}
+                                        </div>
                                     </td>
                                 </tr>
                             ))
@@ -285,7 +344,78 @@ export function CashFlowPanel({
                     onPageSizeChange={kas.setPageSize}
                 />
             )}
+
+            <Dialog
+                open={pendingDelete !== null}
+                onOpenChange={(next) => !next && setPendingDelete(null)}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Hapus kas manual?</DialogTitle>
+                        <DialogDescription>
+                            {pendingDelete && (
+                                <>
+                                    Catatan{' '}
+                                    <span className="font-medium text-foreground">
+                                        {pendingDelete.customer}
+                                    </span>{' '}
+                                    (
+                                    {pendingDelete.direction === 'in'
+                                        ? 'masuk'
+                                        : 'keluar'}{' '}
+                                    {formatRupiah(pendingDelete.amount)}) akan
+                                    dihapus dari kas. Tindakan ini tidak bisa
+                                    dibatalkan.
+                                </>
+                            )}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button variant="outline">Batal</Button>
+                        </DialogClose>
+                        <Button
+                            variant="destructive"
+                            onClick={() => {
+                                if (!pendingDelete) {
+                                    return;
+                                }
+
+                                router.delete(
+                                    `/kas/manual/${pendingDelete.id}`,
+                                    {
+                                        preserveScroll: true,
+                                        onFinish: () => setPendingDelete(null),
+                                    },
+                                );
+                            }}
+                        >
+                            <Trash2 />
+                            Hapus
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </section>
+    );
+}
+
+/** Static cash/transfer label for a manual entry (its method is fixed). */
+function MethodLabel({ method }: { method: PaymentMethod | null }) {
+    if (method === 'transfer') {
+        return (
+            <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+                <Landmark className="size-3.5 text-aktif" />
+                Transfer
+            </span>
+        );
+    }
+
+    return (
+        <span className="inline-flex items-center gap-1.5 text-xs text-muted-foreground">
+            <Banknote className="size-3.5 text-primary" />
+            Tunai
+        </span>
     );
 }
 

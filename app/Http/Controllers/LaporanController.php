@@ -3,8 +3,11 @@
 namespace App\Http\Controllers;
 
 use App\Http\Resources\TransactionResource;
+use App\Models\CashAnchor;
+use App\Models\CashEntry;
 use App\Models\Transaction;
 use App\Models\TransactionEvent;
+use App\Support\ActiveStore;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
@@ -50,6 +53,7 @@ class LaporanController extends Controller
         return Inertia::render('kas', [
             'period' => ['from' => $from, 'to' => $to],
             'cashFlow' => $this->cashFlow($from, $to),
+            'saldoAwal' => $this->saldoAwal($from),
         ]);
     }
 
@@ -69,7 +73,7 @@ class LaporanController extends Controller
         }
 
         $cashFlow = $this->cashFlow($from, $to);
-        $saldo = max(0, (int) $request->query('saldo', 0));
+        $saldo = $this->saldoAwal($from) ?? 0;
         $shop = mb_substr(trim((string) $request->query('shop', '')) ?: 'Gulam Cell', 0, 60);
         $periodLabel = $from === $to
             ? $this->idDate($from)
@@ -84,7 +88,7 @@ class LaporanController extends Controller
             'in' => $cashFlow['in'],
             'out' => $cashFlow['out'],
             'net' => $cashFlow['net'],
-            'kindLabels' => ['tebus' => 'Tebus', 'perpanjang' => 'Perpanjang', 'lelang' => 'Lelang', 'pencairan' => 'Pencairan'],
+            'kindLabels' => ['tebus' => 'Tebus', 'perpanjang' => 'Perpanjang', 'lelang' => 'Lelang', 'pencairan' => 'Pencairan', 'manual' => 'Manual'],
             'methodLabels' => ['cash' => 'Tunai', 'transfer' => 'Transfer'],
         ])->render();
 
@@ -107,6 +111,61 @@ class LaporanController extends Controller
         $date = Carbon::parse($ymd);
 
         return $date->day.' '.$months[$date->month].' '.$date->year;
+    }
+
+    /**
+     * Set (or correct, during reconciliation) the physical cash balance. The
+     * running balance is computed forward from this checkpoint.
+     */
+    public function setCashAnchor(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'amount' => ['required', 'integer', 'min:0'],
+            'date' => ['nullable', 'date'],
+        ]);
+
+        CashAnchor::create([
+            'store_id' => app(ActiveStore::class)->id(),
+            'anchor_date' => $data['date'] ?? now()->toDateString(),
+            'amount' => (int) $data['amount'],
+            'set_by' => $request->user()?->name,
+        ]);
+
+        return back()->with('success', 'Saldo kas diperbarui.');
+    }
+
+    /**
+     * The physical cash balance at the start of the given day, computed from
+     * the latest anchor on or before it plus the net cash since. Null when no
+     * anchor has been set yet for the active store.
+     */
+    private function saldoAwal(string $date): ?int
+    {
+        if ($date === '') {
+            return null;
+        }
+
+        $storeId = app(ActiveStore::class)->id();
+        $anchor = CashAnchor::query()
+            ->when($storeId === null, fn ($q) => $q->whereNull('store_id'), fn ($q) => $q->where('store_id', $storeId))
+            ->whereDate('anchor_date', '<=', $date)
+            ->orderByDesc('anchor_date')
+            ->orderByDesc('id')
+            ->first();
+
+        if ($anchor === null) {
+            return null;
+        }
+
+        $anchorDate = $anchor->anchor_date->toDateString();
+        $dayBefore = Carbon::parse($date)->subDay()->toDateString();
+
+        // Net cash for the full days between the anchor and the day in question.
+        $net = $anchorDate > $dayBefore
+            ? 0
+            : $this->cashFlow($anchorDate, $dayBefore)['net'];
+
+        return (int) $anchor->amount + $net;
     }
 
     /**
@@ -399,10 +458,10 @@ class LaporanController extends Controller
      * is listed individually so the clerk can tick it off against real cash.
      *
      * @return array{
-     *     in: array{tebus: int, perpanjang: int, lelang: int, cash: int, transfer: int, unset: int, total: int},
-     *     out: array{pencairan: int, total: int},
+     *     in: array{tebus: int, perpanjang: int, lelang: int, manual: int, cash: int, transfer: int, unset: int, total: int},
+     *     out: array{pencairan: int, manual: int, total: int},
      *     net: int,
-     *     entries: array<int, array{id: int, code: string, customer: string, kind: string, direction: string, amount: int, method: string|null, date: string, time: string|null, clerk: string}>
+     *     entries: array<int, array{id: int, source: string, code: string|null, customer: string, kind: string, direction: string, amount: int, method: string|null, date: string, time: string|null, clerk: string}>
      * }
      */
     private function cashFlow(string $from, string $to): array
@@ -413,13 +472,18 @@ class LaporanController extends Controller
             ->whereIn('type', ['created', 'redeemed', 'extended', 'auctioned'])
             ->when($from !== '', fn ($q) => $q->whereDate('event_date', '>=', $from))
             ->when($to !== '', fn ($q) => $q->whereDate('event_date', '<=', $to))
-            ->orderByDesc('event_date')
-            ->orderByDesc('id')
             ->get();
 
-        $in = ['tebus' => 0, 'perpanjang' => 0, 'lelang' => 0, 'cash' => 0, 'transfer' => 0, 'unset' => 0, 'total' => 0];
-        $out = ['pencairan' => 0, 'total' => 0];
+        $in = ['tebus' => 0, 'perpanjang' => 0, 'lelang' => 0, 'manual' => 0, 'cash' => 0, 'transfer' => 0, 'unset' => 0, 'total' => 0];
+        $out = ['pencairan' => 0, 'manual' => 0, 'total' => 0];
         $entries = [];
+
+        $addIn = function (int $amount, ?string $method, string $kind) use (&$in) {
+            $in[$kind] += $amount;
+            $in['total'] += $amount;
+            $bucket = in_array($method, ['cash', 'transfer'], true) ? $method : 'unset';
+            $in[$bucket] += $amount;
+        };
 
         foreach ($events as $event) {
             $transaction = $event->transaction;
@@ -443,13 +507,7 @@ class LaporanController extends Controller
             }
 
             if ($direction === 'in') {
-                $in[$kind] += $amount;
-                $in['total'] += $amount;
-
-                $bucket = in_array($event->payment_method, ['cash', 'transfer'], true)
-                    ? $event->payment_method
-                    : 'unset';
-                $in[$bucket] += $amount;
+                $addIn($amount, $event->payment_method, $kind);
             } else {
                 $out[$kind] += $amount;
                 $out['total'] += $amount;
@@ -457,6 +515,7 @@ class LaporanController extends Controller
 
             $entries[] = [
                 'id' => $event->id,
+                'source' => 'event',
                 'code' => $transaction->code,
                 'customer' => $transaction->customer?->name ?? '—',
                 'kind' => $kind,
@@ -469,11 +528,89 @@ class LaporanController extends Controller
             ];
         }
 
+        // Manual cash entries (operational expenses, top-ups, etc.).
+        $storeId = app(ActiveStore::class)->id();
+        $manual = CashEntry::query()
+            ->when($storeId === null, fn ($q) => $q->whereNull('store_id'), fn ($q) => $q->where('store_id', $storeId))
+            ->when($from !== '', fn ($q) => $q->whereDate('entry_date', '>=', $from))
+            ->when($to !== '', fn ($q) => $q->whereDate('entry_date', '<=', $to))
+            ->get();
+
+        foreach ($manual as $entry) {
+            $amount = (int) $entry->amount;
+
+            if ($entry->direction === 'in') {
+                $addIn($amount, $entry->method, 'manual');
+            } else {
+                $out['manual'] += $amount;
+                $out['total'] += $amount;
+            }
+
+            $entries[] = [
+                'id' => $entry->id,
+                'source' => 'manual',
+                'code' => null,
+                'customer' => $entry->description,
+                'kind' => 'manual',
+                'direction' => $entry->direction,
+                'amount' => $amount,
+                'method' => $entry->method,
+                'date' => $entry->entry_date->format('Y-m-d'),
+                'time' => $entry->created_at?->format('H.i'),
+                'clerk' => $entry->by ?? '—',
+            ];
+        }
+
+        // Newest first across both sources.
+        usort($entries, fn ($a, $b) => strcmp(
+            $b['date'].' '.($b['time'] ?? ''),
+            $a['date'].' '.($a['time'] ?? ''),
+        ));
+
         return [
             'in' => $in,
             'out' => $out,
             'net' => $in['total'] - $out['total'],
             'entries' => $entries,
         ];
+    }
+
+    /**
+     * Record a manual cash movement (e.g. an operational expense) on the daily
+     * cash page. It counts toward the reconciliation like any other movement.
+     */
+    public function storeCashEntry(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'direction' => ['required', 'in:in,out'],
+            'amount' => ['required', 'integer', 'min:1'],
+            'description' => ['required', 'string', 'max:120'],
+            'method' => ['nullable', 'in:cash,transfer'],
+            'date' => ['nullable', 'date'],
+        ]);
+
+        CashEntry::create([
+            'store_id' => app(ActiveStore::class)->id(),
+            'entry_date' => $data['date'] ?? now()->toDateString(),
+            'direction' => $data['direction'],
+            'amount' => (int) $data['amount'],
+            'description' => $data['description'],
+            'method' => $data['method'] ?? 'cash',
+            'by' => $request->user()?->name,
+        ]);
+
+        return back()->with('success', 'Kas manual dicatat.');
+    }
+
+    /** Remove a manual cash entry (only within the active store). */
+    public function destroyCashEntry(CashEntry $cashEntry): RedirectResponse
+    {
+        $storeId = app(ActiveStore::class)->id();
+
+        abort_unless($cashEntry->store_id === $storeId, 403);
+
+        $cashEntry->delete();
+
+        return back()->with('success', 'Kas manual dihapus.');
     }
 }

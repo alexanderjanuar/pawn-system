@@ -6,6 +6,7 @@ const KIND_LABEL: Record<CashKind, string> = {
     perpanjang: 'Perpanjang',
     lelang: 'Lelang',
     pencairan: 'Pencairan',
+    manual: 'Manual',
 };
 
 const METHOD_LABEL: Record<'cash' | 'transfer', string> = {

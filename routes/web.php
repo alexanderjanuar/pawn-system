@@ -37,6 +37,7 @@ Route::middleware(['auth', 'active-store'])->group(function () {
 
     // Kas harian (rekonsiliasi uang masuk/keluar) — semua peran, termasuk petugas
     Route::get('kas', [LaporanController::class, 'kas'])->name('kas');
+    Route::get('kas/export', [LaporanController::class, 'kasExport'])->name('kas.export');
     Route::patch('kas/entri/{event}/metode', [LaporanController::class, 'updateCashMethod'])->name('kas.method');
 
     // Transaksi

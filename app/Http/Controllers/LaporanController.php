@@ -9,6 +9,8 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Response as HttpResponse;
+use Illuminate\Support\Carbon;
 use Inertia\Inertia;
 use Inertia\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
@@ -49,6 +51,62 @@ class LaporanController extends Controller
             'period' => ['from' => $from, 'to' => $to],
             'cashFlow' => $this->cashFlow($from, $to),
         ]);
+    }
+
+    /**
+     * Daily cash as a styled Excel file (HTML-based .xls, no extra package),
+     * mirroring the manual cash book: itemised Masuk & Keluar, totals, and a
+     * reconciliation block (Saldo Awal, Kas Sistem, Kas Fisik, Selisih).
+     */
+    public function kasExport(Request $request): HttpResponse
+    {
+        if ($request->has('from') || $request->has('to')) {
+            $from = (string) $request->query('from', '');
+            $to = (string) $request->query('to', '');
+        } else {
+            $from = now()->toDateString();
+            $to = now()->toDateString();
+        }
+
+        $cashFlow = $this->cashFlow($from, $to);
+        $saldo = max(0, (int) $request->query('saldo', 0));
+        $shop = mb_substr(trim((string) $request->query('shop', '')) ?: 'Gulam Cell', 0, 60);
+        $periodLabel = $from === $to
+            ? $this->idDate($from)
+            : $this->idDate($from).' – '.$this->idDate($to);
+
+        $html = view('exports.kas', [
+            'shop' => $shop,
+            'periodLabel' => $periodLabel,
+            'saldo' => $saldo,
+            'masuk' => array_values(array_filter($cashFlow['entries'], fn ($e) => $e['direction'] === 'in')),
+            'keluar' => array_values(array_filter($cashFlow['entries'], fn ($e) => $e['direction'] === 'out')),
+            'in' => $cashFlow['in'],
+            'out' => $cashFlow['out'],
+            'net' => $cashFlow['net'],
+            'kindLabels' => ['tebus' => 'Tebus', 'perpanjang' => 'Perpanjang', 'lelang' => 'Lelang', 'pencairan' => 'Pencairan'],
+            'methodLabels' => ['cash' => 'Tunai', 'transfer' => 'Transfer'],
+        ])->render();
+
+        $fileName = 'kas-harian-'.($from ?: 'semua').($from !== $to ? '-'.$to : '').'.xls';
+
+        return response($html, 200, [
+            'Content-Type' => 'application/vnd.ms-excel; charset=UTF-8',
+            'Content-Disposition' => 'attachment; filename="'.$fileName.'"',
+        ]);
+    }
+
+    /** Format a Y-m-d date in Indonesian short form, e.g. "14 Agu 2026". */
+    private function idDate(string $ymd): string
+    {
+        if ($ymd === '') {
+            return '';
+        }
+
+        $months = ['', 'Jan', 'Feb', 'Mar', 'Apr', 'Mei', 'Jun', 'Jul', 'Agu', 'Sep', 'Okt', 'Nov', 'Des'];
+        $date = Carbon::parse($ymd);
+
+        return $date->day.' '.$months[$date->month].' '.$date->year;
     }
 
     /**

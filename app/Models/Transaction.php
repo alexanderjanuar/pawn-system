@@ -13,6 +13,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Str;
 
 /**
  * @property int $id
@@ -60,7 +61,7 @@ use Illuminate\Support\Carbon;
     'fee_percent', 'fee', 'start_date', 'due_date', 'status', 'clerk', 'notes',
     'extensions', 'photos', 'ktp_path',
     'approval_status', 'approved_by', 'approved_at',
-    'sale_value', 'sold_at',
+    'sale_value', 'sold_at', 'share_token',
 ])]
 class Transaction extends Model
 {
@@ -95,6 +96,23 @@ class Transaction extends Model
     public function isPendingApproval(): bool
     {
         return $this->approval_status === 'pending';
+    }
+
+    /**
+     * A short, unguessable token backing the public nota link. Generated once
+     * and persisted so the shared link stays stable for the transaction.
+     */
+    public function shareToken(): string
+    {
+        if (blank($this->share_token)) {
+            do {
+                $token = Str::lower(Str::random(10));
+            } while (static::query()->where('share_token', $token)->exists());
+
+            $this->forceFill(['share_token' => $token])->save();
+        }
+
+        return $this->share_token;
     }
 
     /**

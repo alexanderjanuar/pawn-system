@@ -76,6 +76,7 @@ class StoreGadaiRequest extends FormRequest
             'ktp' => ['nullable', 'image', 'max:5120'],
 
             'cetak' => ['boolean'],
+            'kirim_wa' => ['boolean'],
         ];
     }
 

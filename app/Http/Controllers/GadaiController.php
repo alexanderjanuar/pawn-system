@@ -161,7 +161,17 @@ class GadaiController extends Controller
             ? route('transaksi.nota', $transaction)
             : route('transaksi.show', $transaction);
 
-        return redirect($target)->with('success', "Gadai {$transaction->code} berhasil dibuat.");
+        $message = "Gadai {$transaction->code} berhasil dibuat.";
+
+        // Optionally hand the customer their nota over WhatsApp right away.
+        if (! empty($data['kirim_wa']) && filled($customer->phone)) {
+            $result = $this->deliverNota($transaction, null, $clerk);
+            $message .= $result['sent']
+                ? ' Nota terkirim ke WhatsApp pelanggan.'
+                : ' Namun nota gagal dikirim ke WhatsApp.';
+        }
+
+        return redirect($target)->with('success', $message);
     }
 
     public function approve(Request $request, Transaction $transaction): RedirectResponse
@@ -574,6 +584,87 @@ class GadaiController extends Controller
         );
 
         return back()->with('success', "Pengingat terkirim ke {$transaction->customer->name}.");
+    }
+
+    /**
+     * Send the transaction's nota to the customer's WhatsApp. Tries to attach
+     * the PDF file; if that fails, falls back to sending a link.
+     */
+    public function sendNota(Request $request, Transaction $transaction): RedirectResponse
+    {
+        $data = $request->validate([
+            'message' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        if (blank($transaction->customer->phone)) {
+            return back()->with('error', 'Pelanggan belum memiliki nomor WhatsApp.');
+        }
+
+        if (! app(Fonnte::class)->isConfigured()) {
+            return back()->with('error', 'WhatsApp belum dikonfigurasi. Hubungi admin untuk mengatur token Fonnte.');
+        }
+
+        $result = $this->deliverNota($transaction, $data['message'] ?? null, $request->user()?->name);
+
+        if (! $result['sent']) {
+            return back()->with('error', 'Nota gagal dikirim. Periksa koneksi atau pengaturan WhatsApp.');
+        }
+
+        return back()->with('success', "Link nota terkirim ke {$transaction->customer->name}.");
+    }
+
+    /**
+     * Send the customer a short public link to their nota over WhatsApp and
+     * record an event on success. The link opens the nota PDF in the browser.
+     *
+     * @return array{sent: bool}
+     */
+    private function deliverNota(Transaction $transaction, ?string $message, ?string $by): array
+    {
+        $link = route('nota.public', ['token' => $transaction->shareToken()]);
+
+        $text = filled($message)
+            ? rtrim($message)."\n\nNota: {$link}"
+            : $this->buildNotaMessage($transaction, $link);
+
+        $sent = app(Fonnte::class)->send($transaction->customer->phone, $text);
+
+        if ($sent) {
+            $transaction->events()->create([
+                'type' => 'nota_sent',
+                'event_date' => now(),
+                'title' => 'Nota dikirim ke WhatsApp (link)',
+                'by' => $by,
+            ]);
+
+            ActivityLog::record(
+                'updated',
+                'transaction',
+                $transaction->code,
+                $transaction->customer->name,
+                'Mengirim nota ke WhatsApp (link)',
+            );
+        }
+
+        return ['sent' => $sent];
+    }
+
+    /** Default WhatsApp message body when handing a nota to the customer. */
+    private function buildNotaMessage(Transaction $transaction, string $link): string
+    {
+        return implode("\n", [
+            "Halo {$transaction->customer->name},",
+            '',
+            'Berikut nota gadai Anda dari Gulam Cell.',
+            '',
+            "No. Nota: {$transaction->code}",
+            "Barang: {$transaction->device_name}",
+            'Jatuh tempo: '.$transaction->due_date->format('d-m-Y'),
+            '',
+            "Buka & simpan nota: {$link}",
+            '',
+            'Mohon simpan nota ini untuk penebusan atau perpanjangan. Terima kasih.',
+        ]);
     }
 
     public function markNotRedeemed(Request $request, Transaction $transaction): RedirectResponse

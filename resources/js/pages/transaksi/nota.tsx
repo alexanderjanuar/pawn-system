@@ -2,6 +2,7 @@ import { Head, Link } from '@inertiajs/react';
 import { ArrowLeft, Printer } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { parsePattern } from '@/components/gadai/pattern-lock';
 import { TransactionQr } from '@/components/gadai/transaction-qr';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
@@ -253,6 +254,16 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
                 />
             </FieldBox>
 
+            {/* Kunci barang & catatan (hanya jika ada) */}
+            {(hasLock(tx) || Boolean(tx.notes?.trim())) && (
+                <FieldBox half={half}>
+                    {hasLock(tx) && <LockRow half={half} device={tx.device} />}
+                    {Boolean(tx.notes?.trim()) && (
+                        <Row half={half} label="Catatan" value={tx.notes} />
+                    )}
+                </FieldBox>
+            )}
+
             {/* Ketentuan */}
             <ol
                 className={cn(
@@ -304,6 +315,134 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
                 </div>
             </div>
         </>
+    );
+}
+
+/** Whether the device has an unlock code worth printing. */
+function hasLock(tx: Transaction): boolean {
+    return tx.device.lockType !== 'none' && Boolean(tx.device.lockValue);
+}
+
+const LOCK_SUFFIX: Record<string, string> = {
+    pin: 'PIN',
+    password: 'Kata Sandi',
+    pattern: 'Pola',
+};
+
+/** A nota row for the device unlock code: PIN/password as text, pattern as a grid. */
+function LockRow({
+    device,
+    half,
+}: {
+    device: Transaction['device'];
+    half: boolean;
+}) {
+    const label = `Kunci Barang · ${LOCK_SUFFIX[device.lockType] ?? ''}`.trim();
+    const value = device.lockValue ?? '';
+
+    if (device.lockType === 'pattern') {
+        const seq = parsePattern(value);
+
+        return (
+            <Row
+                half={half}
+                label={label}
+                value={
+                    <span className="flex items-center gap-2">
+                        <NotaPattern value={value} size={half ? 44 : 72} />
+                        <span
+                            className={cn(
+                                'font-bold tabular-nums',
+                                half ? 'text-[9px]' : 'text-sm',
+                            )}
+                        >
+                            {seq.join(' → ')}
+                        </span>
+                    </span>
+                }
+            />
+        );
+    }
+
+    return (
+        <Row
+            half={half}
+            label={label}
+            value={<span className="font-mono font-bold">{value}</span>}
+        />
+    );
+}
+
+const PATTERN_DOTS = [1, 2, 3, 4, 5, 6, 7, 8, 9];
+
+/** Center of dot `n` (1-9) on a 120x120 grid. */
+function patternCenter(n: number): { cx: number; cy: number } {
+    const i = n - 1;
+
+    return { cx: 20 + (i % 3) * 40, cy: 20 + Math.floor(i / 3) * 40 };
+}
+
+/** Print-friendly (neutral, ink-only) render of an unlock pattern. */
+function NotaPattern({ value, size }: { value: string; size: number }) {
+    const seq = parsePattern(value);
+    const order = new Map<number, number>();
+    seq.forEach((n, i) => order.set(n, i + 1));
+
+    return (
+        <svg
+            viewBox="0 0 120 120"
+            width={size}
+            height={size}
+            className="shrink-0 rounded border border-neutral-400"
+        >
+            {seq.slice(1).map((n, i) => {
+                const a = patternCenter(seq[i]);
+                const b = patternCenter(n);
+
+                return (
+                    <line
+                        key={`${seq[i]}-${n}`}
+                        x1={a.cx}
+                        y1={a.cy}
+                        x2={b.cx}
+                        y2={b.cy}
+                        className="stroke-neutral-900"
+                        strokeWidth={3}
+                        strokeLinecap="round"
+                    />
+                );
+            })}
+            {PATTERN_DOTS.map((n) => {
+                const { cx, cy } = patternCenter(n);
+                const active = order.has(n);
+
+                return (
+                    <g key={n}>
+                        <circle
+                            cx={cx}
+                            cy={cy}
+                            r={active ? 11 : 5}
+                            className={
+                                active ? 'fill-neutral-900' : 'fill-neutral-400'
+                            }
+                        />
+                        {active && (
+                            <text
+                                x={cx}
+                                y={cy}
+                                textAnchor="middle"
+                                dominantBaseline="central"
+                                className="fill-neutral-50"
+                                fontSize={10}
+                                fontWeight={700}
+                            >
+                                {order.get(n)}
+                            </text>
+                        )}
+                    </g>
+                );
+            })}
+        </svg>
     );
 }
 

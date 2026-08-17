@@ -18,6 +18,7 @@ import {
     Printer,
     QrCode,
     RefreshCw,
+    Send,
     ShieldCheck,
     Smartphone,
     Trash2,
@@ -32,6 +33,7 @@ import { ImageLightbox } from '@/components/gadai/image-lightbox';
 import { PageHeader } from '@/components/gadai/page-header';
 import { PatternLock } from '@/components/gadai/pattern-lock';
 import { QrLightbox } from '@/components/gadai/qr-lightbox';
+import { SendNotaDialog } from '@/components/gadai/send-nota-dialog';
 import { Timeline } from '@/components/gadai/timeline';
 import { TransactionQr } from '@/components/gadai/transaction-qr';
 import { PetugasLink } from '@/components/petugas-link';
@@ -95,6 +97,7 @@ export default function TransaksiShow({
     const [revertExtendOpen, setRevertExtendOpen] = useState(false);
     const [editExtendOpen, setEditExtendOpen] = useState(false);
     const [tidakDiambilOpen, setTidakDiambilOpen] = useState(false);
+    const [sendNotaOpen, setSendNotaOpen] = useState(false);
 
     const lelang = tx.status === 'LELANG';
     const notRedeemed = tx.status === 'TIDAK_DIAMBIL';
@@ -218,6 +221,16 @@ export default function TransaksiShow({
                                             Edit transaksi
                                         </Link>
                                     </DropdownMenuItem>
+                                    {approved && (
+                                        <DropdownMenuItem
+                                            onSelect={() =>
+                                                setSendNotaOpen(true)
+                                            }
+                                        >
+                                            <Send />
+                                            Kirim Nota ke WhatsApp
+                                        </DropdownMenuItem>
+                                    )}
                                     {running && tx.extensions > 0 && (
                                         <DropdownMenuItem
                                             onSelect={() =>
@@ -319,6 +332,11 @@ export default function TransaksiShow({
                         tx={tx}
                         open={editExtendOpen}
                         onOpenChange={setEditExtendOpen}
+                    />
+                    <SendNotaDialog
+                        tx={tx}
+                        open={sendNotaOpen}
+                        onOpenChange={setSendNotaOpen}
                     />
                     <div className="mt-3 flex flex-wrap items-center gap-2">
                         <StatusBadge

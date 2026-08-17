@@ -10,6 +10,7 @@ use App\Http\Controllers\PelangganController;
 use App\Http\Controllers\PengaturanController;
 use App\Http\Controllers\PenggunaController;
 use App\Http\Controllers\PiutangController;
+use App\Http\Controllers\PublicNotaController;
 use App\Http\Controllers\RakController;
 use App\Http\Controllers\TokoController;
 use App\Http\Controllers\TransaksiController;
@@ -66,6 +67,7 @@ Route::middleware(['auth', 'active-store'])->group(function () {
 
     // Pengingat WhatsApp ke pelanggan
     Route::post('transaksi/{transaction}/ingatkan', [GadaiController::class, 'remind'])->name('transaksi.remind');
+    Route::post('transaksi/{transaction}/kirim-nota', [GadaiController::class, 'sendNota'])->name('transaksi.kirim-nota');
 
     // Tidak diambil (wanprestasi) + Lelang
     Route::post('transaksi/{transaction}/tidak-diambil', [GadaiController::class, 'markNotRedeemed'])->name('transaksi.tidak-diambil');
@@ -138,5 +140,8 @@ Route::middleware(['auth', 'active-store'])->group(function () {
 
 // Halaman publik: pelanggan cek status gadai miliknya sendiri
 Route::get('cek-status', [CekStatusController::class, 'index'])->name('cek-status');
+
+// Link nota pendek yang dikirim ke WhatsApp pelanggan (token tak bisa ditebak)
+Route::get('n/{token}', PublicNotaController::class)->name('nota.public');
 
 require __DIR__.'/settings.php';

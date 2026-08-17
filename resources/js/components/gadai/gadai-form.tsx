@@ -27,6 +27,15 @@ import { PatternLock } from '@/components/gadai/pattern-lock';
 import { PhotoUploader } from '@/components/gadai/photo-uploader';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
@@ -178,6 +187,7 @@ export function GadaiForm({
         start_date:
             transaction?.startDate ?? today ?? TODAY.toISOString().slice(0, 10),
         notes: transaction?.notes ?? '',
+        kirim_wa: false,
         photos: [] as File[],
         photo_labels: [] as string[],
         ktp: [] as File[],
@@ -312,17 +322,21 @@ export function GadaiForm({
           ? 'cth. Honda Vario 125'
           : 'cth. Asus ROG Strix';
 
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [pendingCetak, setPendingCetak] = useState(false);
+
     const onPrincipalChange = (raw: string) => {
         const digits = raw.replace(/\D/g, '');
         setData('principal', digits ? parseInt(digits, 10) : 0);
     };
 
+    const onError = () =>
+        toast.error('Periksa kembali data yang diisi.', {
+            description: 'Ada isian yang belum lengkap atau tidak valid.',
+        });
+
     const submit = (e: FormEvent, cetak = false) => {
         e.preventDefault();
-        const onError = () =>
-            toast.error('Periksa kembali data yang diisi.', {
-                description: 'Ada isian yang belum lengkap atau tidak valid.',
-            });
 
         if (isEdit && transaction) {
             transform((current) => ({
@@ -339,13 +353,26 @@ export function GadaiForm({
             return;
         }
 
+        // New gadai: confirm the summary before actually creating it.
+        setPendingCetak(cetak);
+        setConfirmOpen(true);
+    };
+
+    const executeCreate = () => {
         transform((current) => ({
             ...current,
             ktp: current.ktp[0] ?? null,
             rak_id: current.rak_id === 'none' ? null : current.rak_id,
-            cetak: cetak ? 1 : 0,
+            cetak: pendingCetak ? 1 : 0,
+            kirim_wa: current.kirim_wa ? 1 : 0,
         }));
-        post('/gadai', { forceFormData: true, onError });
+        post('/gadai', {
+            forceFormData: true,
+            onError: () => {
+                setConfirmOpen(false);
+                onError();
+            },
+        });
     };
 
     return (
@@ -1544,6 +1571,32 @@ export function GadaiForm({
                                     </p>
                                 )}
 
+                            {!isEdit && (
+                                <label
+                                    htmlFor="kirim-wa"
+                                    className="flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-sm has-[:checked]:border-primary/40 has-[:checked]:bg-primary/5"
+                                >
+                                    <Checkbox
+                                        id="kirim-wa"
+                                        checked={data.kirim_wa}
+                                        onCheckedChange={(v) =>
+                                            setData('kirim_wa', v === true)
+                                        }
+                                        className="mt-0.5"
+                                    />
+                                    <span>
+                                        <span className="font-medium">
+                                            Kirim nota ke WhatsApp pelanggan
+                                        </span>
+                                        <span className="block text-xs text-muted-foreground">
+                                            Link nota dikirim otomatis setelah
+                                            transaksi disimpan (butuh nomor HP &
+                                            tanpa perlu persetujuan).
+                                        </span>
+                                    </span>
+                                </label>
+                            )}
+
                             <div className="flex flex-col gap-2">
                                 {isEdit ? (
                                     <Button
@@ -1590,7 +1643,117 @@ export function GadaiForm({
                     </div>
                 </div>
             </form>
+
+            {!isEdit && (
+                <Dialog open={confirmOpen} onOpenChange={setConfirmOpen}>
+                    <DialogContent>
+                        <DialogHeader>
+                            <DialogTitle>Konfirmasi Gadai Baru</DialogTitle>
+                            <DialogDescription>
+                                Periksa ringkasan berikut sebelum menyimpan.
+                                Pastikan datanya sudah benar.
+                            </DialogDescription>
+                        </DialogHeader>
+
+                        <dl className="grid gap-2.5 rounded-lg border bg-muted/30 p-4 text-sm">
+                            <ConfirmRow
+                                label="Pelanggan"
+                                value={
+                                    (data.customer_mode === 'existing'
+                                        ? selectedCustomer?.name
+                                        : data.name.trim()) || '—'
+                                }
+                            />
+                            <ConfirmRow
+                                label="No. HP"
+                                value={
+                                    (data.customer_mode === 'existing'
+                                        ? selectedCustomer?.phone
+                                        : data.phone.trim()) || '—'
+                                }
+                            />
+                            <ConfirmRow
+                                label="Barang"
+                                value={data.device_name.trim() || '—'}
+                            />
+                            <ConfirmRow
+                                label="Dana titipan"
+                                value={formatRupiah(data.principal)}
+                            />
+                            <ConfirmRow
+                                label="Biaya titipan"
+                                value={`${formatRupiah(calc.fee)} · ${calc.tenorDays} hari`}
+                            />
+                            <ConfirmRow
+                                label="Total tebus"
+                                value={formatRupiah(calc.total)}
+                                strong
+                            />
+                            <ConfirmRow
+                                label="Jatuh tempo"
+                                value={formatDate(calc.dueDate)}
+                            />
+                        </dl>
+
+                        {data.kirim_wa && (
+                            <p className="rounded-lg border border-primary/30 bg-primary/5 p-3 text-xs text-muted-foreground">
+                                Nota akan dikirim ke WhatsApp pelanggan setelah
+                                transaksi disimpan.
+                            </p>
+                        )}
+
+                        <DialogFooter>
+                            <Button
+                                variant="outline"
+                                onClick={() => setConfirmOpen(false)}
+                            >
+                                Batal
+                            </Button>
+                            <Button onClick={executeCreate} disabled={processing}>
+                                {pendingCetak ? (
+                                    <>
+                                        <Printer />
+                                        Ya, Simpan &amp; Cetak
+                                    </>
+                                ) : (
+                                    <>
+                                        <Save />
+                                        Ya, Simpan
+                                    </>
+                                )}
+                            </Button>
+                        </DialogFooter>
+                    </DialogContent>
+                </Dialog>
+            )}
         </>
+    );
+}
+
+/** One label/value line in the gadai confirmation summary. */
+function ConfirmRow({
+    label,
+    value,
+    strong = false,
+}: {
+    label: string;
+    value: string;
+    strong?: boolean;
+}) {
+    return (
+        <div className="flex items-baseline justify-between gap-3">
+            <dt className="shrink-0 text-muted-foreground">{label}</dt>
+            <dd
+                className={cn(
+                    'min-w-0 text-right',
+                    strong
+                        ? 'font-semibold text-foreground tabular-nums'
+                        : 'font-medium',
+                )}
+            >
+                {value}
+            </dd>
+        </div>
     );
 }
 

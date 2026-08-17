@@ -63,7 +63,13 @@ export type Device = {
 };
 
 export type TimelineType =
-    'created' | 'reminder' | 'extended' | 'redeemed' | 'auctioned' | 'flagged';
+    | 'created'
+    | 'reminder'
+    | 'nota_sent'
+    | 'extended'
+    | 'redeemed'
+    | 'auctioned'
+    | 'flagged';
 
 export type TimelineEvent = {
     type: TimelineType;

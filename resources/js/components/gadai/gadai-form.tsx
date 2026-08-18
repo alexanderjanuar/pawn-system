@@ -25,6 +25,13 @@ import { FileDropzone } from '@/components/gadai/file-dropzone';
 import { PageHeader } from '@/components/gadai/page-header';
 import { PatternLock } from '@/components/gadai/pattern-lock';
 import { PhotoUploader } from '@/components/gadai/photo-uploader';
+import { defaultWalletId, useWallets } from '@/components/gadai/wallet-field';
+import {
+    isFundingValid,
+    normalizeFunding,
+    WalletSourceField,
+} from '@/components/gadai/wallet-source-field';
+import type { SplitRow } from '@/components/gadai/wallet-source-field';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -147,6 +154,7 @@ export function GadaiForm({
         return code ? (customers.find((c) => c.id === code) ?? null) : null;
     }, [customers, transaction]);
 
+    const wallets = useWallets();
     const { data, setData, post, processing, errors, transform } = useForm({
         code_mode: 'auto',
         code: '',
@@ -188,6 +196,8 @@ export function GadaiForm({
             transaction?.startDate ?? today ?? TODAY.toISOString().slice(0, 10),
         notes: transaction?.notes ?? '',
         kirim_wa: false,
+        wallet_id: defaultWalletId(wallets),
+        wallet_split: null as SplitRow[] | null,
         photos: [] as File[],
         photo_labels: [] as string[],
         ktp: [] as File[],
@@ -335,6 +345,23 @@ export function GadaiForm({
             description: 'Ada isian yang belum lengkap atau tidak valid.',
         });
 
+    // Split funding (if used) must add up to the principal.
+    const fundingValid = isFundingValid(data.wallet_split, data.principal);
+    const createDisabled =
+        processing ||
+        data.principal <= 0 ||
+        !data.clerk.trim() ||
+        !fundingValid;
+    const fundingSplit = normalizeFunding(data.wallet_split, data.principal);
+    const fundingLabel = fundingSplit
+        ? fundingSplit
+              .map(
+                  (r) =>
+                      `${wallets.find((w) => w.id === r.wallet_id)?.name ?? 'Dompet'} ${formatRupiah(r.amount)}`,
+              )
+              .join(' · ')
+        : null;
+
     const submit = (e: FormEvent, cetak = false) => {
         e.preventDefault();
 
@@ -359,13 +386,28 @@ export function GadaiForm({
     };
 
     const executeCreate = () => {
-        transform((current) => ({
-            ...current,
-            ktp: current.ktp[0] ?? null,
-            rak_id: current.rak_id === 'none' ? null : current.rak_id,
-            cetak: pendingCetak ? 1 : 0,
-            kirim_wa: current.kirim_wa ? 1 : 0,
-        }));
+        transform((current) => {
+            const payload: Record<string, unknown> = {
+                ...current,
+                ktp: current.ktp[0] ?? null,
+                rak_id: current.rak_id === 'none' ? null : current.rak_id,
+                cetak: pendingCetak ? 1 : 0,
+                kirim_wa: current.kirim_wa ? 1 : 0,
+            };
+
+            const funding = normalizeFunding(
+                current.wallet_split,
+                current.principal,
+            );
+
+            if (funding) {
+                payload.wallet_split = funding;
+            } else {
+                delete payload.wallet_split;
+            }
+
+            return payload;
+        });
         post('/gadai', {
             forceFormData: true,
             onError: () => {
@@ -1572,29 +1614,46 @@ export function GadaiForm({
                                 )}
 
                             {!isEdit && (
-                                <label
-                                    htmlFor="kirim-wa"
-                                    className="flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-sm has-[:checked]:border-primary/40 has-[:checked]:bg-primary/5"
-                                >
-                                    <Checkbox
-                                        id="kirim-wa"
-                                        checked={data.kirim_wa}
-                                        onCheckedChange={(v) =>
-                                            setData('kirim_wa', v === true)
+                                <div className="grid gap-3 border-t pt-4">
+                                    <WalletSourceField
+                                        label="Dompet sumber dana (pencairan)"
+                                        hint="Dari dompet mana uang gadai ini dicairkan."
+                                        walletId={data.wallet_id}
+                                        onWalletIdChange={(v) =>
+                                            setData('wallet_id', v)
                                         }
-                                        className="mt-0.5"
+                                        split={data.wallet_split}
+                                        onSplitChange={(v) =>
+                                            setData('wallet_split', v)
+                                        }
+                                        principal={data.principal}
                                     />
-                                    <span>
-                                        <span className="font-medium">
-                                            Kirim nota ke WhatsApp pelanggan
+
+                                    <label
+                                        htmlFor="kirim-wa"
+                                        className="flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-sm has-[:checked]:border-primary/40 has-[:checked]:bg-primary/5"
+                                    >
+                                        <Checkbox
+                                            id="kirim-wa"
+                                            checked={data.kirim_wa}
+                                            onCheckedChange={(v) =>
+                                                setData('kirim_wa', v === true)
+                                            }
+                                            className="mt-0.5"
+                                        />
+                                        <span>
+                                            <span className="font-medium">
+                                                Kirim nota ke WhatsApp pelanggan
+                                            </span>
+                                            <span className="block text-xs text-muted-foreground">
+                                                Link nota dikirim otomatis
+                                                setelah transaksi disimpan
+                                                (butuh nomor HP & tanpa perlu
+                                                persetujuan).
+                                            </span>
                                         </span>
-                                        <span className="block text-xs text-muted-foreground">
-                                            Link nota dikirim otomatis setelah
-                                            transaksi disimpan (butuh nomor HP &
-                                            tanpa perlu persetujuan).
-                                        </span>
-                                    </span>
-                                </label>
+                                    </label>
+                                </div>
                             )}
 
                             <div className="flex flex-col gap-2">
@@ -1615,11 +1674,7 @@ export function GadaiForm({
                                         <Button
                                             type="button"
                                             onClick={(e) => submit(e, true)}
-                                            disabled={
-                                                processing ||
-                                                data.principal <= 0 ||
-                                                !data.clerk.trim()
-                                            }
+                                            disabled={createDisabled}
                                         >
                                             <Printer />
                                             Simpan & Cetak Nota
@@ -1627,11 +1682,7 @@ export function GadaiForm({
                                         <Button
                                             type="submit"
                                             variant="outline"
-                                            disabled={
-                                                processing ||
-                                                data.principal <= 0 ||
-                                                !data.clerk.trim()
-                                            }
+                                            disabled={createDisabled}
                                         >
                                             <Save />
                                             Simpan Saja
@@ -1693,6 +1744,12 @@ export function GadaiForm({
                                 label="Jatuh tempo"
                                 value={formatDate(calc.dueDate)}
                             />
+                            {fundingLabel && (
+                                <ConfirmRow
+                                    label="Sumber dana"
+                                    value={fundingLabel}
+                                />
+                            )}
                         </dl>
 
                         {data.kirim_wa && (
@@ -1709,7 +1766,10 @@ export function GadaiForm({
                             >
                                 Batal
                             </Button>
-                            <Button onClick={executeCreate} disabled={processing}>
+                            <Button
+                                onClick={executeCreate}
+                                disabled={processing || !fundingValid}
+                            >
                                 {pendingCetak ? (
                                     <>
                                         <Printer />

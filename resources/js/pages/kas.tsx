@@ -1,6 +1,7 @@
 import { Head, router, useForm, usePage } from '@inertiajs/react';
 import {
     Banknote,
+    ChevronDown,
     Copy,
     FileSpreadsheet,
     Landmark,
@@ -14,7 +15,17 @@ import { CashFlowPanel } from '@/components/gadai/cash-flow-panel';
 import { DatePicker } from '@/components/gadai/date-picker';
 import { DateRangeFilter } from '@/components/gadai/date-range-filter';
 import { PageHeader } from '@/components/gadai/page-header';
+import {
+    defaultWalletId,
+    useWallets,
+    WalletField,
+} from '@/components/gadai/wallet-field';
 import { Button } from '@/components/ui/button';
+import {
+    Collapsible,
+    CollapsibleContent,
+    CollapsibleTrigger,
+} from '@/components/ui/collapsible';
 import {
     Dialog,
     DialogClose,
@@ -34,14 +45,26 @@ import { cn } from '@/lib/utils';
 
 type Period = { from: string; to: string };
 
+type WalletSummary = {
+    id: number;
+    name: string;
+    saldoAwal: number | null;
+    masuk: number;
+    keluar: number;
+    net: number;
+    kasAkhir: number | null;
+};
+
 export default function Kas({
     period,
     cashFlow,
     saldoAwal,
+    walletSummary,
 }: {
     period: Period;
     cashFlow: CashFlow;
     saldoAwal: number | null;
+    walletSummary: WalletSummary[];
 }) {
     const props = usePage().props;
     const shopName =
@@ -87,7 +110,11 @@ export default function Kas({
                     description="Uang masuk & keluar untuk dicocokkan dengan uang di laci. Default menampilkan hari ini."
                 >
                     <ManualEntryDialog period={period} />
-                    <SaldoDialog period={period} kasAkhir={kasAkhir} />
+                    <SaldoDialog
+                        period={period}
+                        kasAkhir={kasAkhir}
+                        wallets={walletSummary}
+                    />
                     <Button variant="outline" onClick={copyReport}>
                         <Copy />
                         Salin WhatsApp
@@ -172,6 +199,10 @@ export default function Kas({
                     </div>
                 </div>
 
+                {walletSummary.length > 1 && (
+                    <WalletBreakdown wallets={walletSummary} />
+                )}
+
                 <CashFlowPanel
                     cashFlow={cashFlow}
                     periodLabel={periodLabel}
@@ -182,15 +213,118 @@ export default function Kas({
     );
 }
 
+/** Per-pocket balance table (collapsible): opening, in/out, closing per wallet. */
+function WalletBreakdown({ wallets }: { wallets: WalletSummary[] }) {
+    const [open, setOpen] = useState(false);
+    const sum = (pick: (w: WalletSummary) => number | null) =>
+        wallets.reduce((total, w) => total + (pick(w) ?? 0), 0);
+    const totalAkhir = sum((w) => w.kasAkhir);
+
+    return (
+        <Collapsible
+            open={open}
+            onOpenChange={setOpen}
+            className="overflow-hidden rounded-xl border bg-card shadow-sm"
+        >
+            <CollapsibleTrigger className="group flex w-full items-center gap-3 px-5 py-4 text-left transition-colors hover:bg-accent sm:px-6">
+                <div className="min-w-0 flex-1">
+                    <h2 className="flex items-center gap-2 font-semibold">
+                        <Wallet className="size-4 text-primary" />
+                        Saldo per Dompet
+                    </h2>
+                    <p className="text-xs text-muted-foreground">
+                        Pisahkan uang toko sendiri dari sumber dana lain (mis.
+                        Kak Gulam).
+                    </p>
+                </div>
+                <div className="hidden text-right sm:block">
+                    <span className="block text-xs text-muted-foreground uppercase">
+                        Total Kas Akhir
+                    </span>
+                    <span className="text-sm font-semibold tabular-nums">
+                        {formatRupiah(totalAkhir)}
+                    </span>
+                </div>
+                <ChevronDown className="size-5 shrink-0 text-muted-foreground transition-transform group-data-[state=open]:rotate-180" />
+            </CollapsibleTrigger>
+            <CollapsibleContent className="overflow-x-auto border-t">
+                <table className="w-full min-w-[38rem] text-sm">
+                    <thead>
+                        <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
+                            <th className="px-5 py-3 font-medium">Dompet</th>
+                            <th className="px-5 py-3 text-right font-medium">
+                                Saldo Awal
+                            </th>
+                            <th className="px-5 py-3 text-right font-medium">
+                                Masuk
+                            </th>
+                            <th className="px-5 py-3 text-right font-medium">
+                                Keluar
+                            </th>
+                            <th className="px-5 py-3 text-right font-medium">
+                                Kas Akhir
+                            </th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y">
+                        {wallets.map((w) => (
+                            <tr key={w.id}>
+                                <td className="px-5 py-3 font-medium">
+                                    {w.name}
+                                </td>
+                                <td className="px-5 py-3 text-right text-muted-foreground tabular-nums">
+                                    {w.saldoAwal !== null
+                                        ? formatRupiah(w.saldoAwal)
+                                        : '—'}
+                                </td>
+                                <td className="px-5 py-3 text-right text-primary tabular-nums">
+                                    {formatRupiah(w.masuk)}
+                                </td>
+                                <td className="px-5 py-3 text-right text-overdue tabular-nums">
+                                    {formatRupiah(w.keluar)}
+                                </td>
+                                <td className="px-5 py-3 text-right font-semibold tabular-nums">
+                                    {w.kasAkhir !== null
+                                        ? formatRupiah(w.kasAkhir)
+                                        : '—'}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                    <tfoot>
+                        <tr className="border-t bg-muted/40 font-semibold">
+                            <td className="px-5 py-3">Total</td>
+                            <td className="px-5 py-3 text-right tabular-nums">
+                                {formatRupiah(sum((w) => w.saldoAwal))}
+                            </td>
+                            <td className="px-5 py-3 text-right text-primary tabular-nums">
+                                {formatRupiah(sum((w) => w.masuk))}
+                            </td>
+                            <td className="px-5 py-3 text-right text-overdue tabular-nums">
+                                {formatRupiah(sum((w) => w.keluar))}
+                            </td>
+                            <td className="px-5 py-3 text-right tabular-nums">
+                                {formatRupiah(sum((w) => w.kasAkhir))}
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </CollapsibleContent>
+        </Collapsible>
+    );
+}
+
 /** Record a manual cash movement (typically an operational expense). */
 function ManualEntryDialog({ period }: { period: Period }) {
     const [open, setOpen] = useState(false);
+    const wallets = useWallets();
     const { data, setData, post, processing, errors, reset } = useForm({
         direction: 'out' as 'in' | 'out',
         amount: 0,
         description: '',
         method: 'cash' as 'cash' | 'transfer',
         date: period.from || '',
+        wallet_id: defaultWalletId(wallets),
     });
 
     const submit = () =>
@@ -347,6 +481,11 @@ function ManualEntryDialog({ period }: { period: Period }) {
                             </ToggleGroupItem>
                         </ToggleGroup>
                     </div>
+
+                    <WalletField
+                        value={data.wallet_id}
+                        onChange={(v) => setData('wallet_id', v)}
+                    />
                 </div>
 
                 <DialogFooter>
@@ -375,17 +514,28 @@ function ManualEntryDialog({ period }: { period: Period }) {
 function SaldoDialog({
     period,
     kasAkhir,
+    wallets,
 }: {
     period: Period;
     kasAkhir: number | null;
+    wallets: WalletSummary[];
 }) {
     const [open, setOpen] = useState(false);
+    const walletOptions = useWallets();
     const { data, setData, post, processing, errors, reset } = useForm({
         amount: 0,
         date: period.from || '',
+        wallet_id: defaultWalletId(walletOptions),
     });
 
-    const selisih = kasAkhir !== null ? data.amount - kasAkhir : null;
+    // Compare against the chosen wallet's current system cash (or the whole
+    // shop's when there is only one pocket).
+    const selectedKasAkhir =
+        walletOptions.length > 1
+            ? (wallets.find((w) => w.id === data.wallet_id)?.kasAkhir ?? null)
+            : kasAkhir;
+    const selisih =
+        selectedKasAkhir !== null ? data.amount - selectedKasAkhir : null;
 
     const submit = () =>
         post('/kas/saldo', {
@@ -423,6 +573,13 @@ function SaldoDialog({
                         sini.
                     </DialogDescription>
                 </DialogHeader>
+
+                <WalletField
+                    label="Dompet"
+                    hint="Saldo awal diatur per dompet."
+                    value={data.wallet_id}
+                    onChange={(v) => setData('wallet_id', v)}
+                />
 
                 <div className="grid gap-4 sm:grid-cols-2">
                     <div className="grid gap-1.5">
@@ -473,14 +630,14 @@ function SaldoDialog({
                     </div>
                 </div>
 
-                {kasAkhir !== null && (
+                {selectedKasAkhir !== null && (
                     <dl className="space-y-2 rounded-lg border bg-muted/30 p-4 text-sm">
                         <div className="flex items-baseline justify-between gap-3">
                             <dt className="text-muted-foreground">
                                 Kas sistem saat ini
                             </dt>
                             <dd className="tabular-nums">
-                                {formatRupiah(kasAkhir)}
+                                {formatRupiah(selectedKasAkhir)}
                             </dd>
                         </div>
                         {data.amount > 0 && selisih !== null && (

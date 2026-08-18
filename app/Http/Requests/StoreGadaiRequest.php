@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\Validator;
 
 class StoreGadaiRequest extends FormRequest
 {
@@ -52,6 +53,10 @@ class StoreGadaiRequest extends FormRequest
 
             'clerk' => ['nullable', 'string', 'max:120'],
             'rak_id' => ['nullable', 'integer', 'exists:raks,id'],
+            'wallet_id' => ['nullable', 'integer', 'exists:wallets,id'],
+            'wallet_split' => ['nullable', 'array', 'min:1'],
+            'wallet_split.*.wallet_id' => ['required', 'integer', 'exists:wallets,id'],
+            'wallet_split.*.amount' => ['required', 'integer', 'min:1'],
             'principal' => ['required', 'integer', 'min:1'],
             'tenor_choice' => ['required', 'in:15,30,custom'],
             'custom_days' => ['required_if:tenor_choice,custom', 'nullable', 'integer', 'min:1'],
@@ -78,6 +83,27 @@ class StoreGadaiRequest extends FormRequest
             'cetak' => ['boolean'],
             'kirim_wa' => ['boolean'],
         ];
+    }
+
+    public function withValidator(Validator $validator): void
+    {
+        $validator->after(function ($validator) {
+            $split = $this->input('wallet_split');
+
+            if (! is_array($split) || $split === []) {
+                return;
+            }
+
+            $sum = collect($split)->sum(fn ($row) => (int) ($row['amount'] ?? 0));
+            $principal = (int) $this->input('principal', 0);
+
+            if ($sum !== $principal) {
+                $validator->errors()->add(
+                    'wallet_split',
+                    'Total pembagian dompet harus sama dengan dana titipan ('.number_format($principal, 0, ',', '.').').'
+                );
+            }
+        });
     }
 
     /**

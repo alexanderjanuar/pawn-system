@@ -17,8 +17,9 @@ use Illuminate\Support\Carbon;
  * @property string $description
  * @property string|null $method
  * @property string|null $by
+ * @property int|null $wallet_id
  */
-#[Fillable(['store_id', 'entry_date', 'direction', 'amount', 'description', 'method', 'by'])]
+#[Fillable(['store_id', 'entry_date', 'direction', 'amount', 'description', 'method', 'by', 'wallet_id'])]
 class CashEntry extends Model
 {
     protected function casts(): array

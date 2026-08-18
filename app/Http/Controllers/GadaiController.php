@@ -13,6 +13,7 @@ use App\Models\Rak;
 use App\Models\Setting;
 use App\Models\Store;
 use App\Models\Transaction;
+use App\Models\Wallet;
 use App\Services\Fonnte;
 use App\Support\ActiveStore;
 use Illuminate\Database\Eloquent\Collection;
@@ -133,12 +134,16 @@ class GadaiController extends Controller
             'ktp_path' => $request->file('ktp')?->store('gadai/ktp', 'public'),
         ]);
 
+        $funding = $this->resolveFunding($data['wallet_split'] ?? null, $data['wallet_id'] ?? null);
+
         $transaction->events()->create([
             'type' => 'created',
             'event_date' => $startDate,
             'title' => 'Gadai masuk',
             'by' => $clerk,
             'amount' => $terms['principal'],
+            'wallet_id' => $funding['wallet_id'],
+            'wallet_split' => $funding['wallet_split'],
         ]);
 
         ActivityLog::record(
@@ -363,6 +368,7 @@ class GadaiController extends Controller
 
         $data = $request->validate([
             'payment_method' => ['nullable', 'in:cash,transfer'],
+            'wallet_id' => ['nullable', 'integer', 'exists:wallets,id'],
         ]);
 
         $transaction->update(['status' => 'DIAMBIL']);
@@ -374,6 +380,7 @@ class GadaiController extends Controller
             'by' => $request->user()?->name,
             'amount' => $transaction->principal + $transaction->fee,
             'payment_method' => $data['payment_method'] ?? 'cash',
+            'wallet_id' => $this->resolveWallet($data['wallet_id'] ?? null),
         ]);
 
         ActivityLog::record(
@@ -400,6 +407,7 @@ class GadaiController extends Controller
             // The customer must pay the deposit fee (interest) up front to extend.
             'fee_paid' => ['accepted'],
             'payment_method' => ['nullable', 'in:cash,transfer'],
+            'wallet_id' => ['nullable', 'integer', 'exists:wallets,id'],
         ], [
             'fee_paid.accepted' => 'Pastikan pelanggan sudah membayar biaya titipan sebelum memperpanjang.',
         ]);
@@ -437,6 +445,7 @@ class GadaiController extends Controller
             'by' => $request->user()?->name,
             'amount' => $fee,
             'payment_method' => $data['payment_method'] ?? 'cash',
+            'wallet_id' => $this->resolveWallet($data['wallet_id'] ?? null),
         ]);
 
         ActivityLog::record(
@@ -757,6 +766,7 @@ class GadaiController extends Controller
 
         $data = $request->validate([
             'sale_value' => ['required', 'integer', 'min:0'],
+            'wallet_id' => ['nullable', 'integer', 'exists:wallets,id'],
         ]);
 
         $transaction->update([
@@ -771,6 +781,7 @@ class GadaiController extends Controller
             'by' => $request->user()?->name,
             'amount' => $data['sale_value'],
             'payment_method' => 'cash',
+            'wallet_id' => $this->resolveWallet($data['wallet_id'] ?? null),
         ]);
 
         ActivityLog::record(
@@ -787,6 +798,48 @@ class GadaiController extends Controller
     private function rupiah(int $amount): string
     {
         return 'Rp '.number_format($amount, 0, ',', '.');
+    }
+
+    /**
+     * Resolve which cash pocket a movement belongs to: the chosen active wallet,
+     * or the default pocket when none/an invalid one is given.
+     */
+    private function resolveWallet(?int $walletId): ?int
+    {
+        if ($walletId !== null && Wallet::query()->active()->whereKey($walletId)->exists()) {
+            return $walletId;
+        }
+
+        return Wallet::defaultId();
+    }
+
+    /**
+     * Resolve a disbursement's funding: a single pocket, or a split across
+     * several. A split of two or more pockets is stored on the event; one (or
+     * none) collapses to a single wallet_id.
+     *
+     * @param  array<int, array{wallet_id?: mixed, amount?: mixed}>|null  $split
+     * @return array{wallet_id: int|null, wallet_split: array<int, array{wallet_id: int, amount: int}>|null}
+     */
+    private function resolveFunding(?array $split, ?int $walletId): array
+    {
+        $rows = collect($split ?? [])
+            ->map(fn ($row): array => [
+                'wallet_id' => $this->resolveWallet((int) ($row['wallet_id'] ?? 0)),
+                'amount' => (int) ($row['amount'] ?? 0),
+            ])
+            ->filter(fn (array $row): bool => $row['wallet_id'] !== null && $row['amount'] > 0)
+            ->values();
+
+        if ($rows->count() >= 2) {
+            return ['wallet_id' => $rows->first()['wallet_id'], 'wallet_split' => $rows->all()];
+        }
+
+        if ($rows->count() === 1) {
+            return ['wallet_id' => $rows->first()['wallet_id'], 'wallet_split' => null];
+        }
+
+        return ['wallet_id' => $this->resolveWallet($walletId), 'wallet_split' => null];
     }
 
     /**

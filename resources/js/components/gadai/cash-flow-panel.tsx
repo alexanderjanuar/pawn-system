@@ -46,6 +46,8 @@ export type CashEntry = {
     direction: 'in' | 'out';
     amount: number;
     method: PaymentMethod | null;
+    walletId: number | null;
+    walletName: string | null;
     date: string;
     time: string | null;
     clerk: string;
@@ -63,6 +65,7 @@ export type CashFlow = {
     };
     out: { pencairan: number; manual: number; total: number };
     net: number;
+    byWallet: Record<number, { id: number; in: number; out: number; net: number }>;
     entries: CashEntry[];
 };
 
@@ -225,6 +228,7 @@ export function CashFlowPanel({
                             <th className="px-5 py-3 font-medium">Kode</th>
                             <th className="px-5 py-3 font-medium">Pelanggan</th>
                             <th className="px-5 py-3 font-medium">Jenis</th>
+                            <th className="px-5 py-3 font-medium">Dompet</th>
                             <th className="px-5 py-3 font-medium">Metode</th>
                             <th className="px-5 py-3 font-medium">Petugas</th>
                             <th className="px-5 py-3 text-right font-medium">
@@ -271,6 +275,17 @@ export function CashFlowPanel({
                                         >
                                             {CASH_KIND_LABEL[e.kind]}
                                         </span>
+                                    </td>
+                                    <td className="px-5 py-3">
+                                        {e.walletName ? (
+                                            <span className="inline-flex items-center rounded-md bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
+                                                {e.walletName}
+                                            </span>
+                                        ) : (
+                                            <span className="text-muted-foreground">
+                                                —
+                                            </span>
+                                        )}
                                     </td>
                                     <td className="px-5 py-3">
                                         {e.source === 'manual' ? (
@@ -321,7 +336,7 @@ export function CashFlowPanel({
                         ) : (
                             <tr>
                                 <td
-                                    colSpan={7}
+                                    colSpan={8}
                                     className="px-5 py-10 text-center text-muted-foreground"
                                 >
                                     Belum ada uang masuk atau keluar pada periode

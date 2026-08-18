@@ -12,12 +12,13 @@ use Illuminate\Support\Carbon;
  *
  * @property int $id
  * @property int|null $store_id
+ * @property int|null $wallet_id
  * @property Carbon $anchor_date
  * @property int $amount
  * @property string|null $note
  * @property string|null $set_by
  */
-#[Fillable(['store_id', 'anchor_date', 'amount', 'note', 'set_by'])]
+#[Fillable(['store_id', 'wallet_id', 'anchor_date', 'amount', 'note', 'set_by'])]
 class CashAnchor extends Model
 {
     protected function casts(): array

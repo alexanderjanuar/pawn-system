@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use App\Models\Setting;
 use App\Models\Store;
 use App\Models\Transaction;
+use App\Models\Wallet;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -52,10 +53,31 @@ class HandleInertiaRequests extends Middleware
                 ? $this->overdueCount($this->resolveActiveStoreId($request))
                 : 0,
             'approvalThreshold' => (int) Setting::get('approval_threshold', Transaction::APPROVAL_THRESHOLD),
+            'wallets' => $request->user() ? $this->wallets() : [],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'serverDate' => now()->toDateString(),
             ...$this->storeProps($request),
         ];
+    }
+
+    /**
+     * Active cash pockets, shared so every money form can offer a picker.
+     *
+     * @return array<int, array{id: int, name: string, isDefault: bool}>
+     */
+    protected function wallets(): array
+    {
+        return Wallet::query()
+            ->active()
+            ->orderBy('sort')
+            ->orderBy('id')
+            ->get(['id', 'name', 'is_default'])
+            ->map(fn (Wallet $wallet): array => [
+                'id' => $wallet->id,
+                'name' => $wallet->name,
+                'isDefault' => $wallet->is_default,
+            ])
+            ->all();
     }
 
     /**

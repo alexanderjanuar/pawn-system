@@ -4,6 +4,7 @@ use App\Models\CashAnchor;
 use App\Models\Customer;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Models\Wallet;
 use Inertia\Testing\AssertableInertia as Assert;
 
 test('setting the cash balance stores an anchor and drives Saldo Awal', function () {
@@ -35,7 +36,7 @@ test('Saldo Awal carries yesterday net forward from the anchor', function () {
         ['type' => 'created', 'event_date' => '2026-08-13', 'title' => 'x', 'by' => 'Atul', 'amount' => 1_000_000],
     ]);
     // Opening balance for 13 Aug.
-    CashAnchor::create(['store_id' => null, 'anchor_date' => '2026-08-13', 'amount' => 5_000_000]);
+    CashAnchor::create(['store_id' => null, 'wallet_id' => Wallet::defaultId(), 'anchor_date' => '2026-08-13', 'amount' => 5_000_000]);
 
     // 14 Aug opening = 5.000.000 + net(13 Aug) = 5.000.000 − 900.000.
     $this->actingAs(User::factory()->create())

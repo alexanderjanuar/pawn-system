@@ -7,6 +7,7 @@ use App\Models\CashAnchor;
 use App\Models\CashEntry;
 use App\Models\Transaction;
 use App\Models\TransactionEvent;
+use App\Models\Wallet;
 use App\Support\ActiveStore;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
@@ -50,10 +51,13 @@ class LaporanController extends Controller
             $to = now()->toDateString();
         }
 
+        $cashFlow = $this->cashFlow($from, $to);
+
         return Inertia::render('kas', [
             'period' => ['from' => $from, 'to' => $to],
-            'cashFlow' => $this->cashFlow($from, $to),
+            'cashFlow' => $cashFlow,
             'saldoAwal' => $this->saldoAwal($from),
+            'walletSummary' => $this->walletSummary($from, $cashFlow),
         ]);
     }
 
@@ -122,10 +126,12 @@ class LaporanController extends Controller
         $data = $request->validate([
             'amount' => ['required', 'integer', 'min:0'],
             'date' => ['nullable', 'date'],
+            'wallet_id' => ['nullable', 'integer', 'exists:wallets,id'],
         ]);
 
         CashAnchor::create([
             'store_id' => app(ActiveStore::class)->id(),
+            'wallet_id' => $this->resolveWalletId($data['wallet_id'] ?? null),
             'anchor_date' => $data['date'] ?? now()->toDateString(),
             'amount' => (int) $data['amount'],
             'set_by' => $request->user()?->name,
@@ -134,10 +140,20 @@ class LaporanController extends Controller
         return back()->with('success', 'Saldo kas diperbarui.');
     }
 
+    /** A chosen active wallet, or the default pocket when none/invalid. */
+    private function resolveWalletId(?int $walletId): ?int
+    {
+        if ($walletId !== null && Wallet::query()->active()->whereKey($walletId)->exists()) {
+            return $walletId;
+        }
+
+        return Wallet::defaultId();
+    }
+
     /**
-     * The physical cash balance at the start of the given day, computed from
-     * the latest anchor on or before it plus the net cash since. Null when no
-     * anchor has been set yet for the active store.
+     * The physical cash balance at the start of the given day across all
+     * pockets (sum of each wallet's opening balance). Null when no anchor has
+     * been set yet for the active store.
      */
     private function saldoAwal(string $date): ?int
     {
@@ -145,8 +161,34 @@ class LaporanController extends Controller
             return null;
         }
 
+        $walletIds = $this->anchoredWalletIds($date);
+
+        if ($walletIds === []) {
+            return null;
+        }
+
+        $total = 0;
+
+        foreach ($walletIds as $walletId) {
+            $total += $this->walletSaldoAwal($date, $walletId) ?? 0;
+        }
+
+        return $total;
+    }
+
+    /**
+     * One pocket's opening balance for the given day: its latest anchor on or
+     * before that day plus that pocket's net cash since. Null if never set.
+     */
+    private function walletSaldoAwal(string $date, int $walletId): ?int
+    {
+        if ($date === '') {
+            return null;
+        }
+
         $storeId = app(ActiveStore::class)->id();
         $anchor = CashAnchor::query()
+            ->where('wallet_id', $walletId)
             ->when($storeId === null, fn ($q) => $q->whereNull('store_id'), fn ($q) => $q->where('store_id', $storeId))
             ->whereDate('anchor_date', '<=', $date)
             ->orderByDesc('anchor_date')
@@ -160,12 +202,72 @@ class LaporanController extends Controller
         $anchorDate = $anchor->anchor_date->toDateString();
         $dayBefore = Carbon::parse($date)->subDay()->toDateString();
 
-        // Net cash for the full days between the anchor and the day in question.
         $net = $anchorDate > $dayBefore
             ? 0
-            : $this->cashFlow($anchorDate, $dayBefore)['net'];
+            : ($this->cashFlow($anchorDate, $dayBefore)['byWallet'][$walletId]['net'] ?? 0);
 
         return (int) $anchor->amount + $net;
+    }
+
+    /**
+     * Wallet ids that have an anchor on or before the given day (active store).
+     *
+     * @return array<int, int>
+     */
+    private function anchoredWalletIds(string $date): array
+    {
+        $storeId = app(ActiveStore::class)->id();
+
+        return CashAnchor::query()
+            ->when($storeId === null, fn ($q) => $q->whereNull('store_id'), fn ($q) => $q->where('store_id', $storeId))
+            ->whereNotNull('wallet_id')
+            ->whereDate('anchor_date', '<=', $date)
+            ->distinct()
+            ->pluck('wallet_id')
+            ->all();
+    }
+
+    /**
+     * Per-pocket balance summary for the Kas page: opening balance, in/out for
+     * the period, and the resulting closing balance the drawer should hold.
+     *
+     * @param  array<string, mixed>  $cashFlow
+     * @return array<int, array{id: int, name: string, saldoAwal: int|null, masuk: int, keluar: int, net: int, kasAkhir: int|null}>
+     */
+    private function walletSummary(string $from, array $cashFlow): array
+    {
+        $byWallet = $cashFlow['byWallet'];
+
+        // Every active wallet, plus any (inactive) wallet that still has movement.
+        $wallets = Wallet::query()->active()->orderBy('sort')->orderBy('id')->get();
+        $ids = $wallets->pluck('id')->all();
+
+        foreach (array_keys($byWallet) as $id) {
+            if (! in_array($id, $ids, true)) {
+                $ids[] = $id;
+            }
+        }
+
+        $names = Wallet::query()->pluck('name', 'id');
+        $summary = [];
+
+        foreach ($ids as $id) {
+            $masuk = $byWallet[$id]['in'] ?? 0;
+            $keluar = $byWallet[$id]['out'] ?? 0;
+            $saldoAwal = $this->walletSaldoAwal($from, $id);
+
+            $summary[] = [
+                'id' => $id,
+                'name' => $names[$id] ?? 'Dompet',
+                'saldoAwal' => $saldoAwal,
+                'masuk' => $masuk,
+                'keluar' => $keluar,
+                'net' => $masuk - $keluar,
+                'kasAkhir' => $saldoAwal !== null ? $saldoAwal + ($masuk - $keluar) : null,
+            ];
+        }
+
+        return $summary;
     }
 
     /**
@@ -461,11 +563,15 @@ class LaporanController extends Controller
      *     in: array{tebus: int, perpanjang: int, lelang: int, manual: int, cash: int, transfer: int, unset: int, total: int},
      *     out: array{pencairan: int, manual: int, total: int},
      *     net: int,
-     *     entries: array<int, array{id: int, source: string, code: string|null, customer: string, kind: string, direction: string, amount: int, method: string|null, date: string, time: string|null, clerk: string}>
+     *     byWallet: array<int, array{id: int, in: int, out: int, net: int}>,
+     *     entries: array<int, array<string, mixed>>
      * }
      */
     private function cashFlow(string $from, string $to): array
     {
+        $defaultWalletId = Wallet::defaultId();
+        $walletNames = Wallet::query()->pluck('name', 'id');
+
         $events = TransactionEvent::query()
             ->with('transaction.customer')
             ->whereHas('transaction', fn ($q) => $q->forActiveStore())
@@ -476,6 +582,7 @@ class LaporanController extends Controller
 
         $in = ['tebus' => 0, 'perpanjang' => 0, 'lelang' => 0, 'manual' => 0, 'cash' => 0, 'transfer' => 0, 'unset' => 0, 'total' => 0];
         $out = ['pencairan' => 0, 'manual' => 0, 'total' => 0];
+        $byWallet = [];
         $entries = [];
 
         $addIn = function (int $amount, ?string $method, string $kind) use (&$in) {
@@ -483,6 +590,18 @@ class LaporanController extends Controller
             $in['total'] += $amount;
             $bucket = in_array($method, ['cash', 'transfer'], true) ? $method : 'unset';
             $in[$bucket] += $amount;
+        };
+
+        $addWallet = function (?int $walletId, string $direction, int $amount) use (&$byWallet, $defaultWalletId) {
+            $walletId ??= $defaultWalletId;
+
+            if ($walletId === null) {
+                return;
+            }
+
+            $byWallet[$walletId] ??= ['id' => $walletId, 'in' => 0, 'out' => 0, 'net' => 0];
+            $byWallet[$walletId][$direction] += $amount;
+            $byWallet[$walletId]['net'] += $direction === 'in' ? $amount : -$amount;
         };
 
         foreach ($events as $event) {
@@ -506,6 +625,7 @@ class LaporanController extends Controller
                 continue;
             }
 
+            // Totals count the full amount once.
             if ($direction === 'in') {
                 $addIn($amount, $event->payment_method, $kind);
             } else {
@@ -513,19 +633,38 @@ class LaporanController extends Controller
                 $out['total'] += $amount;
             }
 
-            $entries[] = [
-                'id' => $event->id,
-                'source' => 'event',
-                'code' => $transaction->code,
-                'customer' => $transaction->customer?->name ?? '—',
-                'kind' => $kind,
-                'direction' => $direction,
-                'amount' => $amount,
-                'method' => $event->payment_method,
-                'date' => $event->event_date->format('Y-m-d'),
-                'time' => $event->created_at?->format('H.i'),
-                'clerk' => $event->by ?: $transaction->clerk,
-            ];
+            // A disbursement may be funded from several pockets; each portion is
+            // a separate wallet movement and a separate table row.
+            $allocations = is_array($event->wallet_split) && $event->wallet_split !== []
+                ? $event->wallet_split
+                : [['wallet_id' => $event->wallet_id ?? $defaultWalletId, 'amount' => $amount]];
+
+            foreach ($allocations as $allocation) {
+                $walletId = $allocation['wallet_id'] ?? $defaultWalletId;
+                $portion = (int) ($allocation['amount'] ?? 0);
+
+                if ($portion <= 0) {
+                    continue;
+                }
+
+                $addWallet($walletId, $direction, $portion);
+
+                $entries[] = [
+                    'id' => $event->id,
+                    'source' => 'event',
+                    'code' => $transaction->code,
+                    'customer' => $transaction->customer?->name ?? '—',
+                    'kind' => $kind,
+                    'direction' => $direction,
+                    'amount' => $portion,
+                    'method' => $event->payment_method,
+                    'walletId' => $walletId,
+                    'walletName' => $walletId !== null ? ($walletNames[$walletId] ?? null) : null,
+                    'date' => $event->event_date->format('Y-m-d'),
+                    'time' => $event->created_at?->format('H.i'),
+                    'clerk' => $event->by ?: $transaction->clerk,
+                ];
+            }
         }
 
         // Manual cash entries (operational expenses, top-ups, etc.).
@@ -546,6 +685,9 @@ class LaporanController extends Controller
                 $out['total'] += $amount;
             }
 
+            $walletId = $entry->wallet_id ?? $defaultWalletId;
+            $addWallet($walletId, $entry->direction, $amount);
+
             $entries[] = [
                 'id' => $entry->id,
                 'source' => 'manual',
@@ -555,6 +697,8 @@ class LaporanController extends Controller
                 'direction' => $entry->direction,
                 'amount' => $amount,
                 'method' => $entry->method,
+                'walletId' => $walletId,
+                'walletName' => $walletId !== null ? ($walletNames[$walletId] ?? null) : null,
                 'date' => $entry->entry_date->format('Y-m-d'),
                 'time' => $entry->created_at?->format('H.i'),
                 'clerk' => $entry->by ?? '—',
@@ -571,6 +715,7 @@ class LaporanController extends Controller
             'in' => $in,
             'out' => $out,
             'net' => $in['total'] - $out['total'],
+            'byWallet' => $byWallet,
             'entries' => $entries,
         ];
     }
@@ -587,6 +732,7 @@ class LaporanController extends Controller
             'description' => ['required', 'string', 'max:120'],
             'method' => ['nullable', 'in:cash,transfer'],
             'date' => ['nullable', 'date'],
+            'wallet_id' => ['nullable', 'integer', 'exists:wallets,id'],
         ]);
 
         CashEntry::create([
@@ -597,6 +743,7 @@ class LaporanController extends Controller
             'description' => $data['description'],
             'method' => $data['method'] ?? 'cash',
             'by' => $request->user()?->name,
+            'wallet_id' => $this->resolveWalletId($data['wallet_id'] ?? null),
         ]);
 
         return back()->with('success', 'Kas manual dicatat.');

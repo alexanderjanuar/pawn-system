@@ -69,25 +69,20 @@ export default function Nota({ transaction }: { transaction: Transaction }) {
                 </div>
 
                 {landscape ? (
-                    <div className="print-sheet mx-auto flex w-full max-w-[1100px] items-stretch bg-white text-neutral-900 shadow-sm print:max-w-none print:shadow-none">
-                        <div className="min-w-0 flex-1 p-4 print:p-2">
+                    <div className="print-sheet nota-landscape mx-auto flex w-full max-w-[1100px] items-stretch bg-white text-neutral-900 shadow-sm print:max-w-none print:shadow-none">
+                        <div className="min-w-0 flex-1 p-4 print:p-3">
                             <NotaSheet tx={tx} half />
                         </div>
-                        {/* Garis potong */}
-                        <div className="relative mx-1 border-l-2 border-dashed border-neutral-500 print:mx-0.5">
-                            <span className="absolute top-0 left-0 -translate-x-1/2 -translate-y-1/2 bg-white px-0.5 text-[11px] leading-none text-neutral-500">
+                        {/* Garis potong = tepi kiri putus-putus pada nota kedua */}
+                        <div className="relative min-w-0 flex-1 border-l-2 border-dashed border-neutral-500 p-4 print:p-3">
+                            <span className="no-print absolute top-1 left-0 -translate-x-1/2 bg-white px-0.5 text-[11px] leading-none text-neutral-500">
                                 ✂
                             </span>
-                            <span className="absolute bottom-0 left-0 -translate-x-1/2 translate-y-1/2 bg-white px-0.5 text-[11px] leading-none text-neutral-500">
-                                ✂
-                            </span>
-                        </div>
-                        <div className="min-w-0 flex-1 p-4 print:p-2">
                             <NotaSheet tx={tx} half />
                         </div>
                     </div>
                 ) : (
-                    <div className="print-sheet mx-auto w-full max-w-[760px] bg-white p-6 text-neutral-900 shadow-sm sm:p-8 print:max-w-none print:p-0 print:shadow-none">
+                    <div className="print-sheet nota-portrait mx-auto w-full max-w-[760px] bg-white p-6 text-neutral-900 shadow-sm sm:p-8 print:max-w-none print:p-0 print:shadow-none">
                         <NotaSheet tx={tx} />
                     </div>
                 )}
@@ -201,39 +196,65 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
                 <Row half={half} label="Alamat" value={tx.customer.address} />
             </FieldBox>
 
-            {/* Barang */}
-            <FieldBox half={half}>
-                <Row
-                    half={half}
-                    label="Nama & Tipe Barang"
-                    value={tx.device.name}
-                />
-                <Row
-                    half={half}
-                    label="Kelengkapan"
-                    value={tx.device.kelengkapan}
-                />
-                {tx.device.type === 'motor' ? (
-                    <>
-                        <Row
-                            half={half}
-                            label="Plat Nomor"
-                            value={tx.device.platNomor || '-'}
-                        />
-                        <Row
-                            half={half}
-                            label="No. Rangka"
-                            value={tx.device.noRangka || '-'}
-                        />
-                    </>
-                ) : (
-                    <Row
-                        half={half}
-                        label="Nomor Seri"
-                        value={tx.device.serial}
-                    />
+            {/* Barang + Kunci/Catatan berdampingan (hemat tinggi, muat 1 halaman) */}
+            <div
+                className={cn(
+                    'flex items-stretch',
+                    half ? 'mt-2 gap-1.5' : 'mt-3 gap-3',
                 )}
-            </FieldBox>
+            >
+                <div className="min-w-0 flex-1">
+                    <FieldBox half={half} flush>
+                        <Row
+                            half={half}
+                            label="Nama & Tipe Barang"
+                            value={tx.device.name}
+                        />
+                        <Row
+                            half={half}
+                            label="Kelengkapan"
+                            value={tx.device.kelengkapan}
+                        />
+                        {tx.device.type === 'motor' ? (
+                            <>
+                                <Row
+                                    half={half}
+                                    label="Plat Nomor"
+                                    value={tx.device.platNomor || '-'}
+                                />
+                                <Row
+                                    half={half}
+                                    label="No. Rangka"
+                                    value={tx.device.noRangka || '-'}
+                                />
+                            </>
+                        ) : (
+                            <Row
+                                half={half}
+                                label="Nomor Seri"
+                                value={tx.device.serial}
+                            />
+                        )}
+                    </FieldBox>
+                </div>
+
+                {(hasLock(tx) || Boolean(tx.notes?.trim())) && (
+                    <div className="min-w-0 flex-1">
+                        <FieldBox half={half} flush>
+                            {hasLock(tx) && (
+                                <LockRow half={half} device={tx.device} />
+                            )}
+                            {Boolean(tx.notes?.trim()) && (
+                                <Row
+                                    half={half}
+                                    label="Catatan"
+                                    value={tx.notes}
+                                />
+                            )}
+                        </FieldBox>
+                    </div>
+                )}
+            </div>
 
             {/* Dana */}
             <FieldBox half={half}>
@@ -254,23 +275,13 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
                 />
             </FieldBox>
 
-            {/* Kunci barang & catatan (hanya jika ada) */}
-            {(hasLock(tx) || Boolean(tx.notes?.trim())) && (
-                <FieldBox half={half}>
-                    {hasLock(tx) && <LockRow half={half} device={tx.device} />}
-                    {Boolean(tx.notes?.trim()) && (
-                        <Row half={half} label="Catatan" value={tx.notes} />
-                    )}
-                </FieldBox>
-            )}
-
             {/* Ketentuan */}
             <ol
                 className={cn(
                     'list-decimal',
                     half
                         ? 'mt-2 space-y-0.5 pl-3.5 text-[6.5px] leading-[1.2]'
-                        : 'mt-4 space-y-1 pl-5 text-[10.5px] leading-snug sm:text-[11px] print:mt-3 print:space-y-0.5',
+                        : 'mt-4 space-y-1 pl-5 text-[10.5px] leading-snug sm:text-[11px]',
                 )}
             >
                 {KETENTUAN.map((item, i) => (
@@ -284,7 +295,7 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
                     'grid grid-cols-2',
                     half
                         ? 'mt-3 gap-3 text-[9px]'
-                        : 'mt-6 gap-8 text-sm print:mt-4',
+                        : 'mt-6 gap-8 text-sm',
                 )}
             >
                 <div>
@@ -294,7 +305,7 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
                             'border-b border-neutral-900 text-neutral-600',
                             half
                                 ? 'mt-8 w-full pt-0.5 text-[8px]'
-                                : 'mt-14 w-44 pt-1 text-xs print:mt-10',
+                                : 'mt-14 w-44 pt-1 text-xs',
                         )}
                     >
                         {tx.customer.name}
@@ -307,7 +318,7 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
                             'border-b border-neutral-900 text-neutral-600',
                             half
                                 ? 'mt-8 w-full pt-0.5 text-[8px]'
-                                : 'mt-14 w-44 pt-1 text-xs print:mt-10',
+                                : 'mt-14 w-44 pt-1 text-xs',
                         )}
                     >
                         {tx.clerk}
@@ -446,12 +457,24 @@ function NotaPattern({ value, size }: { value: string; size: number }) {
     );
 }
 
-function FieldBox({ children, half }: { children: ReactNode; half: boolean }) {
+function FieldBox({
+    children,
+    half,
+    flush = false,
+}: {
+    children: ReactNode;
+    half: boolean;
+    /** Drop the top margin when the box is laid out inside another container. */
+    flush?: boolean;
+}) {
     return (
         <div
             className={cn(
                 'border-neutral-900',
-                half ? 'mt-2 border' : 'mt-3 border-2',
+                half ? 'border' : 'border-2',
+                // Only side-by-side boxes (flush) fill the row height; standalone
+                // boxes keep their natural height + top margin.
+                flush ? 'h-full' : half ? 'mt-2' : 'mt-3',
             )}
         >
             {children}

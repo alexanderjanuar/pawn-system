@@ -39,6 +39,7 @@ const ownerNavItems: NavItem[] = [
         icon: BadgePercent,
     },
     { title: 'Kelola Petugas', href: '/pengaturan/petugas', icon: UserCog },
+    { title: 'Kelola Dompet', href: '/pengaturan/dompet', icon: Wallet },
     { title: 'Kelola Akun', href: '/pengaturan/akun', icon: KeyRound },
 ];
 

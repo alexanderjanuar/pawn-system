@@ -36,6 +36,11 @@ import { QrLightbox } from '@/components/gadai/qr-lightbox';
 import { SendNotaDialog } from '@/components/gadai/send-nota-dialog';
 import { Timeline } from '@/components/gadai/timeline';
 import { TransactionQr } from '@/components/gadai/transaction-qr';
+import {
+    defaultWalletId,
+    useWallets,
+    WalletField,
+} from '@/components/gadai/wallet-field';
 import { PetugasLink } from '@/components/petugas-link';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
@@ -1115,6 +1120,7 @@ function PerpanjangDialog({ tx }: { tx: Transaction }) {
     // The extension fee follows this transaction's own interest rate, the same
     // for 15 or 30 days. Custom still lets the clerk set a one-off amount.
     const presetFee = computeFee(tx.principal, tx.feePercent);
+    const wallets = useWallets();
     const { data, setData, post, processing, errors, reset, clearErrors } =
         useForm({
             mode: '15' as '15' | '30' | 'custom',
@@ -1122,6 +1128,7 @@ function PerpanjangDialog({ tx }: { tx: Transaction }) {
             fee: presetFee,
             fee_paid: false,
             payment_method: 'cash' as PaymentMethod,
+            wallet_id: defaultWalletId(wallets),
         });
 
     const newDue =
@@ -1287,6 +1294,12 @@ function PerpanjangDialog({ tx }: { tx: Transaction }) {
                     onChange={(v) => setData('payment_method', v)}
                 />
 
+                <WalletField
+                    label="Dompet penerima biaya"
+                    value={data.wallet_id}
+                    onChange={(v) => setData('wallet_id', v)}
+                />
+
                 <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-sm">
                     <Checkbox
                         checked={data.fee_paid}
@@ -1364,8 +1377,12 @@ function PaymentMethodField({
 }
 
 function TebusDialog({ tx }: { tx: Transaction }) {
+    const wallets = useWallets();
     const [open, setOpen] = useState(false);
     const [method, setMethod] = useState<PaymentMethod>('cash');
+    const [walletId, setWalletId] = useState<number | null>(
+        defaultWalletId(wallets),
+    );
     const total = tx.principal + tx.fee;
 
     return (
@@ -1376,6 +1393,7 @@ function TebusDialog({ tx }: { tx: Transaction }) {
 
                 if (!next) {
                     setMethod('cash');
+                    setWalletId(defaultWalletId(wallets));
                 }
             }}
         >
@@ -1413,6 +1431,12 @@ function TebusDialog({ tx }: { tx: Transaction }) {
 
                 <PaymentMethodField value={method} onChange={setMethod} />
 
+                <WalletField
+                    label="Dompet penerima"
+                    value={walletId}
+                    onChange={setWalletId}
+                />
+
                 <DialogFooter>
                     <DialogClose asChild>
                         <Button variant="outline">Batal</Button>
@@ -1421,7 +1445,7 @@ function TebusDialog({ tx }: { tx: Transaction }) {
                         onClick={() =>
                             router.post(
                                 `/transaksi/${tx.id}/tebus`,
-                                { payment_method: method },
+                                { payment_method: method, wallet_id: walletId },
                                 {
                                     preserveScroll: true,
                                     onSuccess: () => setOpen(false),
@@ -1488,8 +1512,10 @@ function RecordSaleDialog({
     open: boolean;
     onOpenChange: (value: boolean) => void;
 }) {
+    const wallets = useWallets();
     const { data, setData, post, processing, errors, reset } = useForm({
         sale_value: 0,
+        wallet_id: defaultWalletId(wallets),
     });
 
     const net = (data.sale_value || 0) - tx.principal;
@@ -1565,6 +1591,11 @@ function RecordSaleDialog({
                                 </p>
                             )}
                         </div>
+                        <WalletField
+                            label="Dompet penerima"
+                            value={data.wallet_id}
+                            onChange={(v) => setData('wallet_id', v)}
+                        />
                         {data.sale_value > 0 && (
                             <p className="text-sm text-muted-foreground">
                                 {net >= 0 ? 'Keuntungan' : 'Kerugian'}:{' '}

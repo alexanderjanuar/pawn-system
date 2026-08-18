@@ -4,6 +4,7 @@ use App\Models\CashAnchor;
 use App\Models\Customer;
 use App\Models\Transaction;
 use App\Models\User;
+use App\Models\Wallet;
 
 test('the kas export streams a CSV with itemised movements and totals', function () {
     $customer = Customer::create([
@@ -21,7 +22,7 @@ test('the kas export streams a CSV with itemised movements and totals', function
         ['type' => 'extended', 'event_date' => '2026-08-13', 'title' => 'Diperpanjang', 'by' => 'Atul', 'amount' => 225_000, 'payment_method' => 'transfer'],
     ]);
     // Persisted opening cash balance for the day.
-    CashAnchor::create(['store_id' => null, 'anchor_date' => '2026-08-13', 'amount' => 10_000_000]);
+    CashAnchor::create(['store_id' => null, 'wallet_id' => Wallet::defaultId(), 'anchor_date' => '2026-08-13', 'amount' => 10_000_000]);
 
     // Default factory user is a petugas — they may export the daily cash.
     $response = $this->actingAs(User::factory()->create())

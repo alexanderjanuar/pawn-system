@@ -15,6 +15,7 @@ declare module '@inertiajs/core' {
             sidebarOpen: boolean;
             overdueCount: number;
             approvalThreshold: number;
+            wallets: { id: number; name: string; isDefault: boolean }[];
             stores: { id: number; name: string; code: string }[];
             activeStore: number | 'all';
             activeStoreName: string | null;

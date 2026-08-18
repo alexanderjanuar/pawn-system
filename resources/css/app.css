@@ -206,6 +206,18 @@ input.no-spinner[type='number'] {
         max-width: none !important;
     }
 
+    /* Force a single page: cap each layout to its printable area and clip any
+       trailing whitespace so the cut line never spills onto a second sheet. */
+    .nota-portrait {
+        max-height: 277mm;
+        overflow: hidden;
+    }
+
+    .nota-landscape {
+        max-height: 194mm;
+        overflow: hidden;
+    }
+
     @page {
         size: A4;
         margin: 10mm;

@@ -14,6 +14,7 @@ use App\Http\Controllers\PublicNotaController;
 use App\Http\Controllers\RakController;
 use App\Http\Controllers\TokoController;
 use App\Http\Controllers\TransaksiController;
+use App\Http\Controllers\WalletController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', function () {
@@ -128,6 +129,12 @@ Route::middleware(['auth', 'active-store'])->group(function () {
         Route::post('pengaturan/petugas', [PengaturanController::class, 'storePetugas'])->name('pengaturan.petugas.store');
         Route::put('pengaturan/petugas/{clerk}', [PengaturanController::class, 'updatePetugas'])->name('pengaturan.petugas.update');
         Route::delete('pengaturan/petugas/{clerk}', [PengaturanController::class, 'destroyPetugas'])->name('pengaturan.petugas.destroy');
+
+        // Kelola dompet (sumber dana kas)
+        Route::get('pengaturan/dompet', [WalletController::class, 'index'])->name('pengaturan.dompet');
+        Route::post('pengaturan/dompet', [WalletController::class, 'store'])->name('pengaturan.dompet.store');
+        Route::put('pengaturan/dompet/{wallet}', [WalletController::class, 'update'])->name('pengaturan.dompet.update');
+        Route::delete('pengaturan/dompet/{wallet}', [WalletController::class, 'destroy'])->name('pengaturan.dompet.destroy');
 
         // Kelola akun login (pengguna)
         Route::get('pengaturan/akun', [PenggunaController::class, 'index'])->name('pengaturan.akun');

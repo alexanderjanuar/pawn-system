@@ -152,8 +152,9 @@ class LaporanController extends Controller
 
     /**
      * The physical cash balance at the start of the given day across all
-     * pockets (sum of each wallet's opening balance). Null when no anchor has
-     * been set yet for the active store.
+     * pockets. When viewing "all stores" it sums each store's opening balance,
+     * so the aggregate is consistent with the (already aggregated) movements.
+     * Null when no anchor has been set yet for the scope.
      */
     private function saldoAwal(string $date): ?int
     {
@@ -161,32 +162,70 @@ class LaporanController extends Controller
             return null;
         }
 
-        $walletIds = $this->anchoredWalletIds($date);
+        $saldos = $this->walletSaldos($date);
 
-        if ($walletIds === []) {
-            return null;
-        }
-
-        $total = 0;
-
-        foreach ($walletIds as $walletId) {
-            $total += $this->walletSaldoAwal($date, $walletId) ?? 0;
-        }
-
-        return $total;
+        return $saldos === [] ? null : (int) array_sum($saldos);
     }
 
     /**
-     * One pocket's opening balance for the given day: its latest anchor on or
-     * before that day plus that pocket's net cash since. Null if never set.
+     * Opening balance per wallet for the active scope, aggregated across every
+     * store when no single store is selected ("Semua Toko").
+     *
+     * @return array<int, int>
      */
-    private function walletSaldoAwal(string $date, int $walletId): ?int
+    private function walletSaldos(string $date): array
+    {
+        if ($date === '') {
+            return [];
+        }
+
+        $saldos = [];
+
+        foreach ($this->saldoStores($date) as $storeId) {
+            foreach ($this->anchoredWalletIds($date, $storeId) as $walletId) {
+                $saldo = $this->walletSaldoAwal($date, $walletId, $storeId);
+
+                if ($saldo !== null) {
+                    $saldos[$walletId] = ($saldos[$walletId] ?? 0) + $saldo;
+                }
+            }
+        }
+
+        return $saldos;
+    }
+
+    /**
+     * Stores whose opening balances count: the active store, or every store
+     * that has an anchor when viewing "all stores".
+     *
+     * @return array<int, int|null>
+     */
+    private function saldoStores(string $date): array
+    {
+        $active = app(ActiveStore::class)->id();
+
+        if ($active !== null) {
+            return [$active];
+        }
+
+        return CashAnchor::query()
+            ->whereDate('anchor_date', '<=', $date)
+            ->pluck('store_id')
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    /**
+     * One pocket's opening balance for a specific store: its latest anchor on
+     * or before the day plus that store+pocket's net cash since. Null if unset.
+     */
+    private function walletSaldoAwal(string $date, int $walletId, ?int $storeId): ?int
     {
         if ($date === '') {
             return null;
         }
 
-        $storeId = app(ActiveStore::class)->id();
         $anchor = CashAnchor::query()
             ->where('wallet_id', $walletId)
             ->when($storeId === null, fn ($q) => $q->whereNull('store_id'), fn ($q) => $q->where('store_id', $storeId))
@@ -204,20 +243,18 @@ class LaporanController extends Controller
 
         $net = $anchorDate > $dayBefore
             ? 0
-            : ($this->cashFlow($anchorDate, $dayBefore)['byWallet'][$walletId]['net'] ?? 0);
+            : ($this->storeWalletNet($storeId, $anchorDate, $dayBefore)[$walletId] ?? 0);
 
         return (int) $anchor->amount + $net;
     }
 
     /**
-     * Wallet ids that have an anchor on or before the given day (active store).
+     * Wallet ids that have an anchor on or before the day for one store scope.
      *
      * @return array<int, int>
      */
-    private function anchoredWalletIds(string $date): array
+    private function anchoredWalletIds(string $date, ?int $storeId): array
     {
-        $storeId = app(ActiveStore::class)->id();
-
         return CashAnchor::query()
             ->when($storeId === null, fn ($q) => $q->whereNull('store_id'), fn ($q) => $q->where('store_id', $storeId))
             ->whereNotNull('wallet_id')
@@ -225,6 +262,73 @@ class LaporanController extends Controller
             ->distinct()
             ->pluck('wallet_id')
             ->all();
+    }
+
+    /**
+     * Net cash per wallet for a single store scope over a date range, used to
+     * roll a pocket's opening balance forward from its anchor date.
+     *
+     * @return array<int, int>
+     */
+    private function storeWalletNet(?int $storeId, string $from, string $to): array
+    {
+        $defaultWalletId = Wallet::defaultId();
+        $net = [];
+
+        $add = function (?int $walletId, string $direction, int $amount) use (&$net, $defaultWalletId) {
+            $walletId ??= $defaultWalletId;
+
+            if ($walletId === null) {
+                return;
+            }
+
+            $net[$walletId] = ($net[$walletId] ?? 0) + ($direction === 'in' ? $amount : -$amount);
+        };
+
+        $events = TransactionEvent::query()
+            ->with('transaction')
+            ->whereHas('transaction', fn ($q) => $storeId === null
+                ? $q->whereNull('store_id')
+                : $q->where('store_id', $storeId))
+            ->whereIn('type', ['created', 'redeemed', 'extended', 'auctioned'])
+            ->when($from !== '', fn ($q) => $q->whereDate('event_date', '>=', $from))
+            ->when($to !== '', fn ($q) => $q->whereDate('event_date', '<=', $to))
+            ->get();
+
+        foreach ($events as $event) {
+            $transaction = $event->transaction;
+
+            if ($transaction === null) {
+                continue;
+            }
+
+            $amount = (int) ($event->amount ?? 0);
+
+            $direction = match ($event->type) {
+                'redeemed', 'extended' => 'in',
+                'auctioned' => $amount > 0 ? 'in' : null,
+                'created' => $transaction->approval_status === 'approved' ? 'out' : null,
+                default => null,
+            };
+
+            if ($direction === null || $amount <= 0) {
+                continue;
+            }
+
+            $add($event->wallet_id, $direction, $amount);
+        }
+
+        $manual = CashEntry::query()
+            ->when($storeId === null, fn ($q) => $q->whereNull('store_id'), fn ($q) => $q->where('store_id', $storeId))
+            ->when($from !== '', fn ($q) => $q->whereDate('entry_date', '>=', $from))
+            ->when($to !== '', fn ($q) => $q->whereDate('entry_date', '<=', $to))
+            ->get();
+
+        foreach ($manual as $entry) {
+            $add($entry->wallet_id, $entry->direction, (int) $entry->amount);
+        }
+
+        return $net;
     }
 
     /**
@@ -237,12 +341,13 @@ class LaporanController extends Controller
     private function walletSummary(string $from, array $cashFlow): array
     {
         $byWallet = $cashFlow['byWallet'];
+        $saldos = $this->walletSaldos($from);
 
-        // Every active wallet, plus any (inactive) wallet that still has movement.
+        // Every active wallet, plus any wallet that has movement or an opening balance.
         $wallets = Wallet::query()->active()->orderBy('sort')->orderBy('id')->get();
         $ids = $wallets->pluck('id')->all();
 
-        foreach (array_keys($byWallet) as $id) {
+        foreach ([...array_keys($byWallet), ...array_keys($saldos)] as $id) {
             if (! in_array($id, $ids, true)) {
                 $ids[] = $id;
             }
@@ -254,7 +359,7 @@ class LaporanController extends Controller
         foreach ($ids as $id) {
             $masuk = $byWallet[$id]['in'] ?? 0;
             $keluar = $byWallet[$id]['out'] ?? 0;
-            $saldoAwal = $this->walletSaldoAwal($from, $id);
+            $saldoAwal = $saldos[$id] ?? null;
 
             $summary[] = [
                 'id' => $id,

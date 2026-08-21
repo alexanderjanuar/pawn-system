@@ -145,6 +145,24 @@ test('a split that does not add up to the principal is rejected', function () {
     expect(Transaction::count())->toBe(0);
 });
 
+test('opening balance shows in the all-stores view even when saved per store', function () {
+    $toko = Wallet::where('is_default', true)->first();
+    $lender = Wallet::create(['name' => 'Kak Gulam Test', 'is_active' => true, 'sort' => 5]);
+
+    // Anchors saved under a specific store (store_id = 1), while the owner
+    // views "Semua Toko" (no active store) in the request below.
+    CashAnchor::create(['store_id' => 1, 'wallet_id' => $toko->id, 'anchor_date' => '2026-08-14', 'amount' => 3_990_000]);
+    CashAnchor::create(['store_id' => 1, 'wallet_id' => $lender->id, 'anchor_date' => '2026-08-14', 'amount' => 10_000_000]);
+
+    $this->actingAs(User::factory()->create())
+        ->get('/kas?from=2026-08-14&to=2026-08-14')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('saldoAwal', 13_990_000) // aggregated across stores
+            ->where('walletSummary', fn ($wallets) => collect($wallets)
+                ->firstWhere('id', $lender->id)['saldoAwal'] === 10_000_000)
+        );
+});
+
 test('a used wallet cannot be hard-deleted but an unused one can', function () {
     $used = Wallet::create(['name' => 'Dipakai', 'is_active' => true, 'sort' => 5]);
     $unused = Wallet::create(['name' => 'Kosong', 'is_active' => true, 'sort' => 6]);

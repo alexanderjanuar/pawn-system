@@ -24,12 +24,10 @@ export default function JatuhTempo({
     transactions: Transaction[];
 }) {
     const groups = useMemo<Group[]>(() => {
-        // Universe: everything still open (AKTIF, PERPANJANG, TIDAK_DIAMBIL)
+        // Universe: pawns still awaiting a decision (AKTIF, PERPANJANG).
+        // "Tidak Diambil" is already an action taken, so it is excluded here.
         const open = transactions.filter(
-            (t) =>
-                t.status === 'AKTIF' ||
-                t.status === 'PERPANJANG' ||
-                t.status === 'TIDAK_DIAMBIL',
+            (t) => t.status === 'AKTIF' || t.status === 'PERPANJANG',
         );
         const byDue = (a: Transaction, b: Transaction) =>
             a.dueDate.localeCompare(b.dueDate);

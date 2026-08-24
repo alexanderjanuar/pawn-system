@@ -147,7 +147,7 @@ class HandleInertiaRequests extends Middleware
     {
         return Transaction::query()
             ->when($storeId !== null, fn ($query) => $query->where('store_id', $storeId))
-            ->whereIn('status', ['AKTIF', 'PERPANJANG', 'TIDAK_DIAMBIL'])
+            ->whereIn('status', ['AKTIF', 'PERPANJANG'])
             ->whereDate('due_date', '<=', now())
             ->count();
     }

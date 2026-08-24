@@ -11,9 +11,11 @@ class JatuhTempoController extends Controller
 {
     public function index(): Response
     {
+        // Only pawns still awaiting a decision. "Tidak Diambil" is already an
+        // action taken, so it no longer belongs in the to-do list here.
         $transactions = Transaction::with(['customer', 'events'])
             ->forActiveStore()
-            ->whereIn('status', ['AKTIF', 'PERPANJANG', 'TIDAK_DIAMBIL'])
+            ->whereIn('status', ['AKTIF', 'PERPANJANG'])
             ->orderBy('due_date')
             ->get();
 

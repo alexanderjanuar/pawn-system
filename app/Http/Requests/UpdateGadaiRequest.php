@@ -66,6 +66,8 @@ class UpdateGadaiRequest extends FormRequest
             ],
             'start_date' => ['required', 'date'],
             'notes' => ['nullable', 'string', 'max:1000'],
+            // Audit: reason when the nominal (principal/fee) is edited.
+            'change_reason' => ['nullable', 'string', 'max:200'],
 
             'photos' => ['nullable', 'array', 'max:8'],
             'photos.*' => ['image', 'max:5120'],

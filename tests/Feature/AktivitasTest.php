@@ -63,6 +63,7 @@ test('editing a transaction records the changed fields', function () {
         'principal' => 2_000_000, // changed nominal
         'tenor_choice' => '15',
         'start_date' => '2026-07-20',
+        'change_reason' => 'Koreksi nominal',
     ])->assertRedirect();
 
     $log = ActivityLog::where('action', 'updated')->first();
@@ -127,6 +128,7 @@ test('transaction detail history includes edits with time and changes', function
         'principal' => 2_000_000,
         'tenor_choice' => '15',
         'start_date' => '2026-07-20',
+        'change_reason' => 'Koreksi nominal',
     ])->assertRedirect();
 
     $this->actingAs($user)

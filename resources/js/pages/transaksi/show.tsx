@@ -1376,14 +1376,44 @@ function PaymentMethodField({
     );
 }
 
+const ADJUST_REASONS = [
+    'Diskon khusus',
+    'Pembulatan',
+    'Nego pelanggan',
+    'Ditebus lebih cepat',
+];
+
 function TebusDialog({ tx }: { tx: Transaction }) {
     const wallets = useWallets();
+    const today = usePage().props.serverDate;
     const [open, setOpen] = useState(false);
     const [method, setMethod] = useState<PaymentMethod>('cash');
     const [walletId, setWalletId] = useState<number | null>(
         defaultWalletId(wallets),
     );
-    const total = tx.principal + tx.fee;
+    // Redemption date — default today, can be back-dated so it lands in the
+    // right day's Kas Harian (e.g. redeemed yesterday, entered today).
+    const [date, setDate] = useState(today);
+    // Optional fee adjustment (e.g. redeemed early) — no separate edit needed.
+    const [adjust, setAdjust] = useState(false);
+    const [fee, setFee] = useState(tx.fee);
+    const [reason, setReason] = useState('');
+
+    const effectiveFee = adjust ? Math.max(0, fee) : tx.fee;
+    const pct =
+        tx.principal > 0 ? Math.round((effectiveFee / tx.principal) * 100) : 0;
+    const total = tx.principal + effectiveFee;
+    // A reason is mandatory whenever the fee is adjusted (audit control).
+    const reasonNeeded = adjust && !reason.trim();
+
+    const reset = () => {
+        setMethod('cash');
+        setWalletId(defaultWalletId(wallets));
+        setDate(today);
+        setAdjust(false);
+        setFee(tx.fee);
+        setReason('');
+    };
 
     return (
         <Dialog
@@ -1392,8 +1422,7 @@ function TebusDialog({ tx }: { tx: Transaction }) {
                 setOpen(next);
 
                 if (!next) {
-                    setMethod('cash');
-                    setWalletId(defaultWalletId(wallets));
+                    reset();
                 }
             }}
         >
@@ -1417,8 +1446,8 @@ function TebusDialog({ tx }: { tx: Transaction }) {
                         value={formatRupiah(tx.principal)}
                     />
                     <Row
-                        label={`Biaya titipan (${tx.feePercent}%)`}
-                        value={formatRupiah(tx.fee)}
+                        label={`Biaya titipan (${pct}%)`}
+                        value={formatRupiah(effectiveFee)}
                     />
                     <div className="border-t pt-2">
                         <Row
@@ -1428,6 +1457,113 @@ function TebusDialog({ tx }: { tx: Transaction }) {
                         />
                     </div>
                 </dl>
+
+                <div className="grid gap-1.5">
+                    <Label htmlFor="tebus-date">Tanggal tebus</Label>
+                    <DatePicker id="tebus-date" value={date} onChange={setDate} />
+                    {date !== today && (
+                        <p className="text-xs text-muted-foreground">
+                            Masuk ke Kas Harian tanggal{' '}
+                            <span className="font-medium text-foreground">
+                                {formatDate(date)}
+                            </span>{' '}
+                            (bukan hari ini).
+                        </p>
+                    )}
+                </div>
+
+                <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-sm has-[:checked]:border-primary/40 has-[:checked]:bg-primary/5">
+                    <Checkbox
+                        checked={adjust}
+                        onCheckedChange={(v) => setAdjust(v === true)}
+                        className="mt-0.5"
+                    />
+                    <span>
+                        <span className="font-medium">
+                            Sesuaikan biaya titipan
+                        </span>
+                        <span className="block text-xs text-muted-foreground">
+                            Ubah biaya bila perlu (mis. ditebus lebih cepat),
+                            tanpa perlu edit transaksi.
+                        </span>
+                    </span>
+                </label>
+
+                {adjust && (
+                    <div className="grid gap-3">
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="tebus-fee">Biaya titipan baru</Label>
+                            <div className="relative">
+                                <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
+                                    Rp
+                                </span>
+                                <Input
+                                    id="tebus-fee"
+                                    inputMode="numeric"
+                                    value={
+                                        fee ? fee.toLocaleString('id-ID') : ''
+                                    }
+                                    onChange={(e) =>
+                                        setFee(
+                                            parseInt(
+                                                e.target.value.replace(
+                                                    /\D/g,
+                                                    '',
+                                                ),
+                                                10,
+                                            ) || 0,
+                                        )
+                                    }
+                                    placeholder="0"
+                                    className="pl-9 tabular-nums"
+                                />
+                            </div>
+                            <p className="text-xs text-muted-foreground">
+                                Biaya semula {formatRupiah(tx.fee)}. Total tebus
+                                jadi{' '}
+                                <span className="font-medium text-foreground">
+                                    {formatRupiah(total)}
+                                </span>
+                                .
+                            </p>
+                        </div>
+
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="tebus-reason">
+                                Alasan penyesuaian{' '}
+                                <span className="text-destructive">*</span>
+                            </Label>
+                            <div className="flex flex-wrap gap-1.5">
+                                {ADJUST_REASONS.map((r) => (
+                                    <button
+                                        key={r}
+                                        type="button"
+                                        onClick={() => setReason(r)}
+                                        className={cn(
+                                            'rounded-full border px-2.5 py-0.5 text-xs transition-colors',
+                                            reason === r
+                                                ? 'border-primary/40 bg-primary/10 text-primary'
+                                                : 'text-muted-foreground hover:bg-accent',
+                                        )}
+                                    >
+                                        {r}
+                                    </button>
+                                ))}
+                            </div>
+                            <Input
+                                id="tebus-reason"
+                                value={reason}
+                                onChange={(e) => setReason(e.target.value)}
+                                placeholder="cth. Diskon khusus, pembulatan, nego pelanggan…"
+                                maxLength={200}
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Wajib diisi. Alasan tercatat di Riwayat &
+                                Aktivitas untuk audit.
+                            </p>
+                        </div>
+                    </div>
+                )}
 
                 <PaymentMethodField value={method} onChange={setMethod} />
 
@@ -1442,10 +1578,21 @@ function TebusDialog({ tx }: { tx: Transaction }) {
                         <Button variant="outline">Batal</Button>
                     </DialogClose>
                     <Button
+                        disabled={reasonNeeded}
                         onClick={() =>
                             router.post(
                                 `/transaksi/${tx.id}/tebus`,
-                                { payment_method: method, wallet_id: walletId },
+                                {
+                                    payment_method: method,
+                                    wallet_id: walletId,
+                                    date,
+                                    ...(adjust
+                                        ? {
+                                              fee: effectiveFee,
+                                              reason: reason.trim(),
+                                          }
+                                        : {}),
+                                },
                                 {
                                     preserveScroll: true,
                                     onSuccess: () => setOpen(false),

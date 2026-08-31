@@ -195,6 +195,7 @@ export function GadaiForm({
         start_date:
             transaction?.startDate ?? today ?? TODAY.toISOString().slice(0, 10),
         notes: transaction?.notes ?? '',
+        change_reason: '',
         kirim_wa: false,
         wallet_id: defaultWalletId(wallets),
         wallet_split: null as SplitRow[] | null,
@@ -281,6 +282,14 @@ export function GadaiForm({
         data.fee_mode,
         data.start_date,
     ]);
+
+    // Editing the nominal (dana/biaya) requires an audit reason.
+    const nominalChanged =
+        isEdit &&
+        transaction != null &&
+        (data.principal !== transaction.principal ||
+            calc.fee !== transaction.fee);
+    const reasonMissing = nominalChanged && !data.change_reason.trim();
 
     /**
      * Live preview of the auto nota number for the chosen start date. The final
@@ -1656,6 +1665,40 @@ export function GadaiForm({
                                 </div>
                             )}
 
+                            {nominalChanged && (
+                                <div className="grid gap-1.5 rounded-lg border border-primary/30 bg-primary/5 p-3">
+                                    <Label htmlFor="change-reason">
+                                        Alasan perubahan nominal{' '}
+                                        <span className="text-destructive">
+                                            *
+                                        </span>
+                                    </Label>
+                                    <Input
+                                        id="change-reason"
+                                        value={data.change_reason}
+                                        onChange={(e) =>
+                                            setData(
+                                                'change_reason',
+                                                e.target.value,
+                                            )
+                                        }
+                                        placeholder="cth. Diskon khusus, koreksi salah input, nego pelanggan…"
+                                        maxLength={200}
+                                    />
+                                    {errors.change_reason ? (
+                                        <p className="text-xs text-destructive">
+                                            {errors.change_reason}
+                                        </p>
+                                    ) : (
+                                        <p className="text-xs text-muted-foreground">
+                                            Wajib diisi karena dana/biaya diubah.
+                                            Tercatat di Riwayat & Aktivitas untuk
+                                            audit.
+                                        </p>
+                                    )}
+                                </div>
+                            )}
+
                             <div className="flex flex-col gap-2">
                                 {isEdit ? (
                                     <Button
@@ -1663,7 +1706,8 @@ export function GadaiForm({
                                         disabled={
                                             processing ||
                                             data.principal <= 0 ||
-                                            !data.clerk.trim()
+                                            !data.clerk.trim() ||
+                                            reasonMissing
                                         }
                                     >
                                         <Save />

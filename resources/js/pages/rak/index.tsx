@@ -1,7 +1,8 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import {
+    ArrowRightLeft,
     Boxes,
-    ChevronDown,
+    ChevronRight,
     MoreVertical,
     Plus,
     Save,
@@ -26,6 +27,7 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
@@ -82,9 +84,15 @@ const BAR_TRACK: Record<string, string> = {
 export default function RakIndex({ racks, canManage }: PageProps) {
     const showStore = usePage().props.activeStore === 'all';
     const [query, setQuery] = useState('');
-    const [expanded, setExpanded] = useState<number | null>(null);
+    // Store just the id so the open modal re-derives fresh data after a move.
+    const [itemsRakId, setItemsRakId] = useState<number | null>(null);
     const [editTarget, setEditTarget] = useState<Rak | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<Rak | null>(null);
+
+    const itemsTarget =
+        itemsRakId != null
+            ? (racks.find((r) => r.id === itemsRakId) ?? null)
+            : null;
 
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
@@ -118,7 +126,7 @@ export default function RakIndex({ racks, canManage }: PageProps) {
             <div className="flex flex-col gap-5 p-4 sm:p-6">
                 <PageHeader
                     title="Rak"
-                    description="Rak fisik tempat HP gadai disimpan. Klik kartu untuk melihat isinya."
+                    description="Rak fisik tempat HP gadai disimpan. Klik 'Lihat HP tersimpan' untuk membuka daftar isinya."
                 >
                     {canManage && <TambahRakDialog />}
                 </PageHeader>
@@ -169,12 +177,7 @@ export default function RakIndex({ racks, canManage }: PageProps) {
                                     rak={rak}
                                     showStore={showStore}
                                     canManage={canManage}
-                                    open={expanded === rak.id}
-                                    onToggle={() =>
-                                        setExpanded(
-                                            expanded === rak.id ? null : rak.id,
-                                        )
-                                    }
+                                    onOpenItems={() => setItemsRakId(rak.id)}
                                     onEdit={() => setEditTarget(rak)}
                                     onToggleActive={() => toggleActive(rak)}
                                     onDelete={() => setDeleteTarget(rak)}
@@ -191,6 +194,14 @@ export default function RakIndex({ racks, canManage }: PageProps) {
                 )}
             </div>
 
+            {itemsTarget && (
+                <RakItemsDialog
+                    rak={itemsTarget}
+                    racks={racks}
+                    showStore={showStore}
+                    onClose={() => setItemsRakId(null)}
+                />
+            )}
             {editTarget && (
                 <EditRakDialog
                     rak={editTarget}
@@ -211,8 +222,7 @@ function RakCard({
     rak,
     showStore,
     canManage,
-    open,
-    onToggle,
+    onOpenItems,
     onEdit,
     onToggleActive,
     onDelete,
@@ -220,8 +230,7 @@ function RakCard({
     rak: Rak;
     showStore: boolean;
     canManage: boolean;
-    open: boolean;
-    onToggle: () => void;
+    onOpenItems: () => void;
     onEdit: () => void;
     onToggleActive: () => void;
     onDelete: () => void;
@@ -238,7 +247,6 @@ function RakCard({
         <div
             className={cn(
                 'group flex flex-col rounded-xl border bg-card shadow-sm transition-all hover:shadow-md',
-                open && 'ring-1 ring-primary/30',
                 !rak.active && 'opacity-60',
                 tone === 'full' && rak.active && 'border-lelang/40',
             )}
@@ -334,57 +342,189 @@ function RakCard({
                     />
                 </div>
 
-                <button
-                    type="button"
-                    onClick={onToggle}
-                    disabled={rak.count === 0}
-                    className={cn(
-                        'flex items-center justify-between text-sm',
-                        rak.count === 0
-                            ? 'cursor-default text-muted-foreground'
-                            : 'text-foreground hover:text-primary',
-                    )}
-                >
-                    <span>
-                        {rak.count > 0
-                            ? `${rak.count} HP tersimpan`
-                            : 'Kosong'}
-                    </span>
-                    {rak.count > 0 && (
-                        <ChevronDown
-                            className={cn(
-                                'size-4 transition-transform',
-                                open && 'rotate-180',
-                            )}
-                        />
-                    )}
-                </button>
+                {rak.count > 0 ? (
+                    <button
+                        type="button"
+                        onClick={onOpenItems}
+                        className="-mx-1 flex items-center justify-between rounded-md px-1 py-0.5 text-sm text-foreground transition-colors hover:text-primary"
+                    >
+                        <span>Lihat {rak.count} HP tersimpan</span>
+                        <ChevronRight className="size-4" />
+                    </button>
+                ) : (
+                    <span className="text-sm text-muted-foreground">Kosong</span>
+                )}
             </div>
-
-            {open && rak.count > 0 && (
-                <ul className="max-h-64 divide-y overflow-y-auto border-t">
-                    {rak.items.map((item) => (
-                        <li key={item.id}>
-                            <Link
-                                href={item.detailUrl}
-                                className="flex items-center gap-3 px-4 py-2.5 transition-colors hover:bg-accent"
-                            >
-                                <Smartphone className="size-4 shrink-0 text-muted-foreground" />
-                                <div className="min-w-0 flex-1">
-                                    <div className="truncate text-sm font-medium">
-                                        {item.device}
-                                    </div>
-                                    <div className="truncate text-xs text-muted-foreground tabular-nums">
-                                        {item.id} · {item.customer}
-                                    </div>
-                                </div>
-                                <StatusBadge status={item.status} size="sm" />
-                            </Link>
-                        </li>
-                    ))}
-                </ul>
-            )}
         </div>
+    );
+}
+
+/** Modal listing the phones stored on a rack, with a move-to-rack action. */
+function RakItemsDialog({
+    rak,
+    racks,
+    showStore,
+    onClose,
+}: {
+    rak: Rak;
+    racks: Rak[];
+    showStore: boolean;
+    onClose: () => void;
+}) {
+    const [q, setQ] = useState('');
+
+    const items = useMemo(() => {
+        const s = q.trim().toLowerCase();
+
+        return s
+            ? rak.items.filter((i) =>
+                  `${i.device} ${i.id} ${i.customer}`.toLowerCase().includes(s),
+              )
+            : rak.items;
+    }, [rak.items, q]);
+
+    // Other active racks in the same store are valid move destinations.
+    const targets = useMemo(
+        () =>
+            racks.filter(
+                (r) =>
+                    r.id !== rak.id &&
+                    r.active &&
+                    r.storeName === rak.storeName,
+            ),
+        [racks, rak.id, rak.storeName],
+    );
+
+    const move = (item: RakItem, rakId: number | null) =>
+        router.put(
+            `/rak/pindah/${item.id}`,
+            { rak_id: rakId },
+            { preserveScroll: true },
+        );
+
+    return (
+        <Dialog open onOpenChange={(o) => !o && onClose()}>
+            <DialogContent className="max-w-md">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <Boxes className="size-5 text-primary" />
+                        <span className="truncate">{rak.name}</span>
+                        <span className="rounded-full bg-secondary px-2 py-0.5 text-xs font-semibold text-foreground/80 tabular-nums">
+                            {rak.count}
+                            {rak.capacity != null ? `/${rak.capacity}` : ''}
+                        </span>
+                    </DialogTitle>
+                    <DialogDescription>
+                        {rak.count} HP tersimpan
+                        {showStore && rak.storeName
+                            ? ` · ${rak.storeName}`
+                            : ''}{' '}
+                        · gunakan ikon{' '}
+                        <ArrowRightLeft className="inline size-3" /> untuk pindah
+                        rak
+                    </DialogDescription>
+                </DialogHeader>
+
+                {rak.items.length > 6 && (
+                    <div className="relative">
+                        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                        <Input
+                            value={q}
+                            onChange={(e) => setQ(e.target.value)}
+                            placeholder="Cari HP, kode, atau pelanggan…"
+                            className="pl-9"
+                        />
+                    </div>
+                )}
+
+                <ul className="-mx-6 max-h-[55vh] divide-y overflow-y-auto border-y">
+                    {items.length > 0 ? (
+                        items.map((item) => (
+                            <li
+                                key={item.id}
+                                className="flex items-center gap-2 px-6 py-2.5 transition-colors hover:bg-accent"
+                            >
+                                <Link
+                                    href={item.detailUrl}
+                                    className="flex min-w-0 flex-1 items-center gap-3"
+                                >
+                                    <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-secondary text-foreground/70">
+                                        <Smartphone className="size-4.5" />
+                                    </span>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="truncate text-sm font-medium">
+                                            {item.device}
+                                        </div>
+                                        <div className="truncate text-xs text-muted-foreground tabular-nums">
+                                            {item.id} · {item.customer}
+                                        </div>
+                                    </div>
+                                </Link>
+                                <StatusBadge status={item.status} size="sm" />
+                                <DropdownMenu>
+                                    <DropdownMenuTrigger asChild>
+                                        <Button
+                                            variant="ghost"
+                                            size="icon"
+                                            className="size-7 shrink-0 text-muted-foreground hover:text-primary"
+                                            title="Pindah rak"
+                                        >
+                                            <ArrowRightLeft className="size-4" />
+                                        </Button>
+                                    </DropdownMenuTrigger>
+                                    <DropdownMenuContent
+                                        align="end"
+                                        className="w-56"
+                                    >
+                                        <DropdownMenuLabel>
+                                            Pindahkan ke…
+                                        </DropdownMenuLabel>
+                                        <DropdownMenuSeparator />
+                                        {targets.length > 0 ? (
+                                            targets.map((t) => (
+                                                <DropdownMenuItem
+                                                    key={t.id}
+                                                    onSelect={() =>
+                                                        move(item, t.id)
+                                                    }
+                                                >
+                                                    <Boxes className="text-muted-foreground" />
+                                                    <span className="truncate">
+                                                        {t.name}
+                                                    </span>
+                                                    {t.capacity != null && (
+                                                        <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+                                                            {t.count}/
+                                                            {t.capacity}
+                                                        </span>
+                                                    )}
+                                                </DropdownMenuItem>
+                                            ))
+                                        ) : (
+                                            <DropdownMenuItem disabled>
+                                                Tidak ada rak lain
+                                            </DropdownMenuItem>
+                                        )}
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem
+                                            onSelect={() => move(item, null)}
+                                        >
+                                            Keluarkan dari rak
+                                        </DropdownMenuItem>
+                                    </DropdownMenuContent>
+                                </DropdownMenu>
+                            </li>
+                        ))
+                    ) : (
+                        <li className="px-6 py-10 text-center text-sm text-muted-foreground">
+                            {rak.count === 0
+                                ? 'Rak ini sudah kosong.'
+                                : `Tidak ada HP cocok dengan "${q}".`}
+                        </li>
+                    )}
+                </ul>
+            </DialogContent>
+        </Dialog>
     );
 }
 

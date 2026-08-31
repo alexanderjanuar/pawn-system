@@ -12,6 +12,7 @@ import {
     Wallet,
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
+import type { ReactNode } from 'react';
 import { BarChart } from '@/components/gadai/bar-chart';
 import { DateRangeFilter } from '@/components/gadai/date-range-filter';
 import { DonutChart } from '@/components/gadai/donut-chart';
@@ -60,6 +61,74 @@ type Overview = {
     lewatTempo: number;
     lelang: number;
 };
+type CardData = {
+    label: string;
+    value: string;
+    hint: string;
+    icon: typeof Wallet;
+    tone?: string;
+    highlight?: boolean;
+    info?: ReactNode;
+};
+
+/** Small heading above a group of stat cards, with an optional period chip. */
+function BlockHead({
+    title,
+    note,
+    chip,
+}: {
+    title: string;
+    note?: string;
+    chip?: string;
+}) {
+    return (
+        <div className="flex flex-wrap items-baseline justify-between gap-x-2 gap-y-1">
+            <h2 className="text-sm font-semibold">
+                {title}
+                {note && (
+                    <span className="ml-1.5 font-normal text-muted-foreground">
+                        · {note}
+                    </span>
+                )}
+            </h2>
+            {chip && (
+                <span className="rounded-full bg-muted px-2.5 py-0.5 text-xs font-medium text-muted-foreground tabular-nums">
+                    {chip}
+                </span>
+            )}
+        </div>
+    );
+}
+
+/** One metric card. `highlight` makes it the visual anchor of its group. */
+function StatCard({ label, value, hint, icon: Icon, tone, highlight, info }: CardData) {
+    return (
+        <div
+            className={cn(
+                'flex min-w-0 flex-col gap-1 rounded-xl border bg-card p-4 shadow-sm sm:p-5',
+                highlight && 'border-primary/25 bg-primary/[0.04]',
+            )}
+        >
+            <span className="flex items-center gap-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                <Icon className="size-3.5 shrink-0" />
+                <span className="truncate">{label}</span>
+                {info}
+            </span>
+            <span
+                className={cn(
+                    'truncate font-semibold tabular-nums',
+                    highlight
+                        ? 'text-xl sm:text-2xl'
+                        : 'text-base sm:text-lg lg:text-xl',
+                    tone,
+                )}
+            >
+                {value}
+            </span>
+            <span className="text-xs text-muted-foreground">{hint}</span>
+        </div>
+    );
+}
 
 export default function Laporan({
     transactions,
@@ -81,7 +150,6 @@ export default function Laporan({
     const [activeClerk, setActiveClerk] = useState<string | null>(null);
     const rincian = usePagination(transactions, 10);
     const feeRincian = usePagination(feeIncome.entries, 10);
-    const labaBulanIni = trend.find((m) => m.current)?.value ?? 0;
 
     const statusSegments = report.perStatus.map((row) => ({
         label: STATUS_META[row.status].label,
@@ -90,19 +158,38 @@ export default function Laporan({
         colorClassName: STATUS_META[row.status].text,
     }));
 
-    const overviewCards = [
+    // Angka yang MENGIKUTI filter tanggal.
+    const periodeCards: CardData[] = [
         {
-            label: 'Uang Beredar',
-            value: formatRupiah(overview.uangBeredar),
-            hint: 'dana titipan di pelanggan',
+            label: 'Keuntungan',
+            value: formatRupiah(feeIncome.total),
+            hint: `Perpanjang ${formatRupiah(feeIncome.perpanjang)} · Tebus ${formatRupiah(feeIncome.tebus)}`,
+            icon: TrendingUp,
+            tone: 'text-primary',
+            highlight: true,
+            info: <IncomeInfo />,
+        },
+        {
+            label: 'Total Pinjaman Cair',
+            value: formatRupiah(report.danaTersalurkan),
+            hint: `rata-rata ${formatRupiah(report.avgPrincipal)}/transaksi`,
             icon: Wallet,
         },
         {
-            label: 'Laba Bulan Ini',
-            value: formatRupiah(labaBulanIni),
-            hint: 'biaya titipan bulan ini',
-            icon: TrendingUp,
-            tone: 'text-primary',
+            label: 'Jumlah Transaksi',
+            value: String(report.total),
+            hint: `${report.ditebus} ditebus · ${report.lelang} lelang`,
+            icon: Receipt,
+        },
+    ];
+
+    // Angka SNAPSHOT (kondisi sekarang, lepas dari filter tanggal).
+    const kondisiCards: CardData[] = [
+        {
+            label: 'Uang di Pelanggan',
+            value: formatRupiah(overview.uangBeredar),
+            hint: 'dana titipan belum ditebus',
+            icon: Wallet,
         },
         {
             label: 'Barang Aktif',
@@ -113,7 +200,7 @@ export default function Laporan({
         {
             label: 'Lewat Jatuh Tempo',
             value: String(overview.lewatTempo),
-            hint: 'jatuh tempo & terlambat',
+            hint: 'perlu segera ditindak',
             icon: AlertTriangle,
             tone: 'text-overdue',
         },
@@ -135,30 +222,6 @@ export default function Laporan({
         period.from || period.to
             ? `${period.from ? formatDate(period.from) : '—'} – ${period.to ? formatDate(period.to) : '—'}`
             : 'Semua tanggal';
-
-    const kpis = [
-        {
-            label: 'Total Transaksi',
-            value: String(report.total),
-            hint: `${report.ditebus} ditebus · ${report.lelang} lelang`,
-        },
-        {
-            label: 'Dana Tersalurkan',
-            value: formatRupiah(report.danaTersalurkan),
-            hint: `rata-rata ${formatRupiah(report.avgPrincipal)}/transaksi`,
-        },
-        {
-            label: 'Pemasukan Biaya',
-            value: formatRupiah(feeIncome.total),
-            hint: `Perpanjang ${formatRupiah(feeIncome.perpanjang)} · Tebus ${formatRupiah(feeIncome.tebus)}`,
-            tone: 'text-primary',
-        },
-        {
-            label: 'Dana Berjalan',
-            value: formatRupiah(report.runningPrincipal),
-            hint: 'masih di tangan pelanggan',
-        },
-    ];
 
     return (
         <>
@@ -192,37 +255,7 @@ export default function Laporan({
                     </Button>
                 </PageHeader>
 
-                {/* Ringkasan usaha (snapshot, lepas dari filter periode) */}
-                <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 lg:grid-cols-5">
-                    {overviewCards.map((c) => {
-                        const Icon = c.icon;
-
-                        return (
-                            <div
-                                key={c.label}
-                                className="flex min-w-0 flex-col gap-1 rounded-xl border bg-card p-4 shadow-sm sm:p-5"
-                            >
-                                <span className="flex items-center gap-1.5 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                                    <Icon className="size-3.5 shrink-0" />
-                                    <span className="truncate">{c.label}</span>
-                                </span>
-                                <span
-                                    className={cn(
-                                        'truncate text-base font-semibold tabular-nums sm:text-lg lg:text-xl',
-                                        c.tone,
-                                    )}
-                                >
-                                    {c.value}
-                                </span>
-                                <span className="text-xs text-muted-foreground">
-                                    {c.hint}
-                                </span>
-                            </div>
-                        );
-                    })}
-                </div>
-
-                {/* Period */}
+                {/* Filter periode — mengatur blok "Periode Ini" di bawah */}
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
                     <DateRangeFilter
                         from={period.from}
@@ -240,43 +273,35 @@ export default function Laporan({
                         <span className="font-medium text-foreground tabular-nums">
                             {report.total}
                         </span>{' '}
-                        transaksi
-                        <span className="hidden sm:inline">
-                            {' '}
-                            · {periodLabel}
-                        </span>
+                        transaksi pada periode ini
                     </p>
                 </div>
 
-                {/* KPI strip */}
-                <div className="grid grid-cols-2 rounded-xl border bg-card shadow-sm lg:grid-cols-4">
-                    {kpis.map((k, i) => (
-                        <div
-                            key={k.label}
-                            className={cn(
-                                'flex min-w-0 flex-col gap-1 p-4 sm:p-5',
-                                i % 2 === 1 && 'border-l',
-                                i >= 2 && 'border-t lg:border-t-0',
-                                (i === 2 || i === 3) && 'lg:border-l',
-                            )}
-                        >
-                            <span className="flex items-center gap-1 text-xs font-medium tracking-wide text-muted-foreground uppercase">
-                                {k.label}
-                                {k.label === 'Pemasukan Biaya' && <IncomeInfo />}
-                            </span>
-                            <span
-                                className={cn(
-                                    'truncate text-base font-semibold tabular-nums sm:text-lg lg:text-xl',
-                                    k.tone,
-                                )}
-                            >
-                                {k.value}
-                            </span>
-                            <span className="text-xs text-muted-foreground">
-                                {k.hint}
-                            </span>
-                        </div>
-                    ))}
+                {/* Blok 1 — Periode Ini (ikut filter tanggal) */}
+                <div className="flex flex-col gap-3">
+                    <BlockHead
+                        title="Periode Ini"
+                        note="mengikuti filter tanggal"
+                        chip={periodLabel}
+                    />
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                        {periodeCards.map((c) => (
+                            <StatCard key={c.label} {...c} />
+                        ))}
+                    </div>
+                </div>
+
+                {/* Blok 2 — Kondisi Sekarang (snapshot, lepas dari filter) */}
+                <div className="flex flex-col gap-3">
+                    <BlockHead
+                        title="Kondisi Sekarang"
+                        note="tidak terpengaruh filter tanggal"
+                    />
+                    <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
+                        {kondisiCards.map((c) => (
+                            <StatCard key={c.label} {...c} />
+                        ))}
+                    </div>
                 </div>
 
                 <div className="grid gap-5 lg:grid-cols-5">
@@ -286,7 +311,7 @@ export default function Laporan({
                             <div>
                                 <h2 className="flex items-center gap-2 font-semibold">
                                     <TrendingUp className="size-4 text-primary" />
-                                    Pemasukan Biaya Titipan
+                                    Tren Keuntungan
                                     <IncomeInfo />
                                 </h2>
                                 <p className="text-xs text-muted-foreground">

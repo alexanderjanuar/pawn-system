@@ -20,6 +20,7 @@ test('a transaction can be updated (fee + due date recompute)', function () {
         'principal' => 5_000_000,
         'tenor_choice' => '30',
         'start_date' => '2026-07-20',
+        'change_reason' => 'Koreksi data',
     ])->assertRedirect(route('transaksi.show', $tx));
 
     $tx->refresh();

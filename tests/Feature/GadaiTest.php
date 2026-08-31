@@ -1,5 +1,6 @@
 <?php
 
+use App\Models\ActivityLog;
 use App\Models\Customer;
 use App\Models\Transaction;
 use App\Models\User;
@@ -328,6 +329,130 @@ test('a running transaction can be redeemed and taken', function () {
     $tx->refresh();
     expect($tx->status)->toBe('DIAMBIL')
         ->and($tx->events()->where('type', 'redeemed')->count())->toBe(1);
+});
+
+test('redeeming with an adjusted fee updates the fee and the income recorded', function () {
+    $user = User::factory()->create();
+    $customer = Customer::create([
+        'code' => 'PLG-001', 'name' => 'A', 'phone' => '081', 'join_date' => '2026-07-01',
+    ]);
+    $tx = Transaction::create([
+        'code' => 'GCG-20260720-0001', 'customer_id' => $customer->id,
+        'device_owner' => 'A', 'device_name' => 'HP', 'kelengkapan' => 'HP saja',
+        'principal' => 1_000_000, 'tenor_days' => 30, 'fee_percent' => 15, 'fee' => 150_000,
+        'start_date' => '2026-07-20', 'due_date' => '2026-08-19', 'status' => 'AKTIF',
+        'approval_status' => 'approved', 'clerk' => 'Rina',
+    ]);
+
+    // Redeemed early: adjust the deposit fee down to 50.000 in one step, with a reason.
+    $this->actingAs($user)
+        ->post("/transaksi/{$tx->code}/tebus", ['payment_method' => 'cash', 'fee' => 50_000, 'reason' => 'Diskon khusus'])
+        ->assertRedirect();
+
+    $tx->refresh();
+    expect($tx->status)->toBe('DIAMBIL')
+        ->and($tx->fee)->toBe(50_000)
+        ->and($tx->fee_percent)->toBe(5); // 50k / 1jt
+
+    $event = $tx->events()->where('type', 'redeemed')->first();
+    expect($event->amount)->toBe(1_050_000) // principal + adjusted fee
+        ->and($event->note)->toContain('disesuaikan')
+        ->and($event->note)->toContain('Diskon khusus');
+});
+
+test('adjusting the redeem fee without a reason is rejected', function () {
+    $user = User::factory()->create();
+    $customer = Customer::create([
+        'code' => 'PLG-001', 'name' => 'A', 'phone' => '081', 'join_date' => '2026-07-01',
+    ]);
+    $tx = Transaction::create([
+        'code' => 'GCG-20260720-0009', 'customer_id' => $customer->id,
+        'device_owner' => 'A', 'device_name' => 'HP', 'kelengkapan' => 'HP saja',
+        'principal' => 1_000_000, 'tenor_days' => 30, 'fee_percent' => 15, 'fee' => 150_000,
+        'start_date' => '2026-07-20', 'due_date' => '2026-08-19', 'status' => 'AKTIF',
+        'approval_status' => 'approved', 'clerk' => 'Rina',
+    ]);
+
+    $this->actingAs($user)
+        ->post("/transaksi/{$tx->code}/tebus", ['fee' => 50_000])
+        ->assertSessionHasErrors('reason');
+
+    expect($tx->refresh()->status)->toBe('AKTIF'); // not redeemed
+});
+
+test('a redemption can be back-dated so it lands on the chosen day', function () {
+    $user = User::factory()->create();
+    $customer = Customer::create([
+        'code' => 'PLG-001', 'name' => 'A', 'phone' => '081', 'join_date' => '2026-07-01',
+    ]);
+    $tx = Transaction::create([
+        'code' => 'GCG-20260720-0011', 'customer_id' => $customer->id,
+        'device_owner' => 'A', 'device_name' => 'HP', 'kelengkapan' => 'HP saja',
+        'principal' => 1_000_000, 'tenor_days' => 15, 'fee_percent' => 10, 'fee' => 100_000,
+        'start_date' => '2026-07-20', 'due_date' => '2026-08-04', 'status' => 'AKTIF',
+        'approval_status' => 'approved', 'clerk' => 'Rina',
+    ]);
+
+    $this->actingAs($user)
+        ->post("/transaksi/{$tx->code}/tebus", ['date' => '2026-07-25'])
+        ->assertRedirect();
+
+    // The cash movement is stamped on the chosen day (drives Kas Harian).
+    expect($tx->refresh()->status)->toBe('DIAMBIL')
+        ->and($tx->events()->where('type', 'redeemed')->first()->event_date->toDateString())
+        ->toBe('2026-07-25');
+});
+
+test('a redemption date before the pawn date is rejected', function () {
+    $user = User::factory()->create();
+    $customer = Customer::create([
+        'code' => 'PLG-001', 'name' => 'A', 'phone' => '081', 'join_date' => '2026-07-01',
+    ]);
+    $tx = Transaction::create([
+        'code' => 'GCG-20260720-0012', 'customer_id' => $customer->id,
+        'device_owner' => 'A', 'device_name' => 'HP', 'kelengkapan' => 'HP saja',
+        'principal' => 1_000_000, 'tenor_days' => 15, 'fee_percent' => 10, 'fee' => 100_000,
+        'start_date' => '2026-07-20', 'due_date' => '2026-08-04', 'status' => 'AKTIF',
+        'approval_status' => 'approved', 'clerk' => 'Rina',
+    ]);
+
+    $this->actingAs($user)
+        ->post("/transaksi/{$tx->code}/tebus", ['date' => '2026-07-10']) // before start_date
+        ->assertSessionHasErrors('date');
+
+    expect($tx->refresh()->status)->toBe('AKTIF');
+});
+
+test('editing the nominal requires a reason, which is logged', function () {
+    $user = User::factory()->create();
+    $customer = Customer::create([
+        'code' => 'PLG-EDIT', 'name' => 'A', 'phone' => '081', 'join_date' => '2026-07-01',
+    ]);
+    $tx = Transaction::create([
+        'code' => 'GCG-20260720-0002', 'customer_id' => $customer->id,
+        'device_owner' => 'A', 'device_name' => 'HP', 'kelengkapan' => 'HP saja',
+        'principal' => 1_000_000, 'tenor_days' => 15, 'fee_percent' => 10, 'fee' => 100_000,
+        'start_date' => '2026-07-20', 'due_date' => '2026-08-04', 'status' => 'AKTIF',
+        'approval_status' => 'approved', 'clerk' => 'Rina',
+    ]);
+
+    $payload = fn (array $extra = []) => array_merge([
+        'customer_mode' => 'existing', 'customer_code' => $customer->code,
+        'device_name' => 'HP', 'kelengkapan' => 'HP saja', 'status' => 'AKTIF',
+        'principal' => 2_000_000, 'tenor_choice' => '15', 'start_date' => '2026-07-20',
+    ], $extra);
+
+    // Changing the nominal without a reason is rejected.
+    $this->actingAs($user)->put("/transaksi/{$tx->code}", $payload())
+        ->assertSessionHasErrors('change_reason');
+    expect($tx->refresh()->principal)->toBe(1_000_000);
+
+    // With a reason it applies and the reason is logged.
+    $this->actingAs($user)->put("/transaksi/{$tx->code}", $payload(['change_reason' => 'Koreksi salah input']))
+        ->assertRedirect();
+    expect($tx->refresh()->principal)->toBe(2_000_000);
+    expect(ActivityLog::where('subject_code', $tx->code)->where('action', 'updated')->latest('id')->first()?->description)
+        ->toContain('Koreksi salah input');
 });
 
 test('a redeemed transaction cannot be redeemed again', function () {

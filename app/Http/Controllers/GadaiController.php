@@ -254,6 +254,15 @@ class GadaiController extends Controller
             ? $transaction->due_date
             : $startDate->copy()->addDays($terms['days']);
 
+        // Audit: editing the nominal (principal/fee) requires a reason.
+        $nominalChanged = (int) $terms['principal'] !== (int) $transaction->principal
+            || (int) $terms['fee'] !== (int) $transaction->fee;
+        $reason = trim((string) ($data['change_reason'] ?? ''));
+
+        if ($nominalChanged && $reason === '') {
+            return back()->withErrors(['change_reason' => 'Alasan perubahan nominal wajib diisi.'])->withInput();
+        }
+
         $clerk = ($data['clerk'] ?? '') ?: $transaction->clerk;
         $rakId = $data['rak_id'] ?? null;
         $newRakName = $rakId ? (Rak::find($rakId)?->name ?? '—') : '—';
@@ -315,12 +324,18 @@ class GadaiController extends Controller
         $changes = ActivityLog::diff($before, $after);
 
         if ($changes !== []) {
+            $description = 'Mengubah '.collect($changes)->pluck('field')->implode(', ');
+
+            if ($nominalChanged && $reason !== '') {
+                $description .= " (Alasan: {$reason})";
+            }
+
             ActivityLog::record(
                 'updated',
                 'transaction',
                 $transaction->code,
                 $customer->name,
-                'Mengubah '.collect($changes)->pluck('field')->implode(', '),
+                $description,
                 $changes,
             );
         }
@@ -369,16 +384,49 @@ class GadaiController extends Controller
         $data = $request->validate([
             'payment_method' => ['nullable', 'in:cash,transfer'],
             'wallet_id' => ['nullable', 'integer', 'exists:wallets,id'],
+            // Optional adjusted deposit fee (e.g. redeemed early) — no separate edit needed.
+            'fee' => ['nullable', 'integer', 'min:0'],
+            // Audit: a reason is mandatory whenever the fee is adjusted.
+            'reason' => ['nullable', 'string', 'max:200'],
+            // Optional redemption date (default today) — lands in Kas on that day.
+            'date' => [
+                'nullable', 'date',
+                'after_or_equal:'.$transaction->start_date->toDateString(),
+                'before_or_equal:today',
+            ],
         ]);
 
-        $transaction->update(['status' => 'DIAMBIL']);
+        $redeemDate = ! empty($data['date']) ? $data['date'] : now()->toDateString();
+
+        // Use the adjusted fee when given; keep records consistent by storing it.
+        $adjusted = array_key_exists('fee', $data) && $data['fee'] !== null
+            && (int) $data['fee'] !== (int) $transaction->fee;
+
+        if ($adjusted && blank($data['reason'] ?? null)) {
+            return back()->withErrors(['reason' => 'Alasan penyesuaian biaya wajib diisi.']);
+        }
+
+        $fee = $adjusted ? (int) $data['fee'] : (int) $transaction->fee;
+        $percent = $transaction->principal > 0
+            ? (int) round($fee / $transaction->principal * 100)
+            : 0;
+        $reason = trim((string) ($data['reason'] ?? ''));
+
+        $transaction->update([
+            'status' => 'DIAMBIL',
+            'fee' => $fee,
+            'fee_percent' => $percent,
+        ]);
 
         $transaction->events()->create([
             'type' => 'redeemed',
-            'event_date' => now(),
+            'event_date' => $redeemDate,
             'title' => 'Ditebus & diambil',
+            'note' => $adjusted
+                ? 'Biaya titipan disesuaikan menjadi '.$this->rupiah($fee).'. Alasan: '.$reason.'.'
+                : null,
             'by' => $request->user()?->name,
-            'amount' => $transaction->principal + $transaction->fee,
+            'amount' => $transaction->principal + $fee,
             'payment_method' => $data['payment_method'] ?? 'cash',
             'wallet_id' => $this->resolveWallet($data['wallet_id'] ?? null),
         ]);
@@ -388,7 +436,7 @@ class GadaiController extends Controller
             'transaction',
             $transaction->code,
             $transaction->customer->name,
-            'Menebus & mengambil barang',
+            'Menebus & mengambil barang'.($adjusted ? " (biaya disesuaikan: {$reason})" : ''),
         );
 
         return back()->with('success', "Transaksi {$transaction->code} ditebus & diambil.");

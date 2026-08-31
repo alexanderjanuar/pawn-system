@@ -92,6 +92,8 @@ Route::middleware(['auth', 'active-store'])->group(function () {
 
     // Rak (rak fisik penyimpanan HP) — dilihat semua peran, dikelola owner/admin
     Route::get('rak', [RakController::class, 'index'])->name('rak.index');
+    // Pindah HP antar rak: operasional, boleh oleh semua peran
+    Route::put('rak/pindah/{transaction}', [RakController::class, 'moveItem'])->name('rak.move');
     Route::middleware('role:owner,admin')->group(function () {
         Route::post('rak', [RakController::class, 'store'])->name('rak.store');
         Route::put('rak/{rak}', [RakController::class, 'update'])->name('rak.update');

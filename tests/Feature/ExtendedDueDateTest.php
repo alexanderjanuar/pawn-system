@@ -24,6 +24,7 @@ function editPayload(Customer $customer, array $overrides = []): array
         'principal' => 800_000,
         'tenor_choice' => '30',
         'start_date' => '2026-07-11',
+        'change_reason' => 'Koreksi',
     ], $overrides);
 }
 

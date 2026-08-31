@@ -116,6 +116,45 @@ class RakController extends Controller
     }
 
     /**
+     * Move one held phone (transaction) to another rack, or off the rack.
+     * The change is logged so it appears in the transaction's Riwayat & audit.
+     */
+    public function moveItem(Request $request, Transaction $transaction): RedirectResponse
+    {
+        $data = $request->validate([
+            'rak_id' => ['nullable', 'integer', 'exists:raks,id'],
+        ]);
+
+        $targetId = $data['rak_id'] ?? null;
+        $targetRak = $targetId ? Rak::find($targetId) : null;
+
+        // A phone can only be moved to a rack in its own store.
+        if ($targetRak !== null && $targetRak->store_id !== $transaction->store_id) {
+            return back()->with('error', 'Rak tujuan bukan dari toko yang sama.');
+        }
+
+        if (($transaction->rak_id ?? null) === $targetId) {
+            return back();
+        }
+
+        $from = $transaction->rak?->name ?? 'Tanpa rak';
+        $to = $targetRak?->name ?? 'Tanpa rak';
+
+        $transaction->update(['rak_id' => $targetId]);
+
+        ActivityLog::record(
+            'updated',
+            'transaction',
+            $transaction->code,
+            $transaction->customer->name,
+            "Memindahkan rak: {$from} → {$to}",
+            [['field' => 'Rak', 'from' => $from, 'to' => $to]],
+        );
+
+        return back()->with('success', "{$transaction->device_name} dipindahkan ke {$to}.");
+    }
+
+    /**
      * The store a new rack belongs to (the active store). Returns false when a
      * management user is viewing "all stores" and must pick one first; null in
      * a single-shop setup with no stores yet.

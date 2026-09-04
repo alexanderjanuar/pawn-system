@@ -12,6 +12,7 @@ import {
     PlusCircle,
     RefreshCw,
     Send,
+    ShieldAlert,
     ShieldCheck,
     X,
 } from 'lucide-react';
@@ -33,7 +34,7 @@ import {
 import { STATUS_META, STATUS_ORDER } from '@/lib/gadai';
 import { countByStatus, runningTransactions } from '@/lib/selectors';
 import { cn } from '@/lib/utils';
-import type { TimelineType, Transaction } from '@/types/gadai';
+import type { Activity, TimelineType, Transaction } from '@/types/gadai';
 
 const ACTIVITY_ICON: Record<
     TimelineType,
@@ -140,9 +141,13 @@ function DueRow({ t }: { t: Transaction }) {
 export default function Dashboard({
     transactions,
     pendingApprovals,
+    reviewQueue,
+    reviewCount,
 }: {
     transactions: Transaction[];
     pendingApprovals: Transaction[];
+    reviewQueue: Activity[];
+    reviewCount: number;
 }) {
     const page = usePage().props;
     const role = page.auth.user?.role;
@@ -364,6 +369,103 @@ export default function Dashboard({
                                 </li>
                             ))}
                         </ul>
+                    </section>
+                )}
+
+                {reviewQueue.length > 0 && (
+                    <section className="overflow-hidden rounded-xl border border-lelang/30 bg-lelang-soft/30 shadow-sm">
+                        <div className="flex flex-wrap items-center gap-2 border-b border-lelang/20 px-5 py-4">
+                            <ShieldAlert className="size-4 text-lelang" />
+                            <h2 className="font-semibold">Perlu Diperiksa</h2>
+                            <span className="inline-flex items-center rounded-full bg-lelang px-2 py-0.5 text-[11px] font-medium text-white tabular-nums">
+                                {reviewCount}
+                            </span>
+                            <p className="ml-1 hidden text-xs text-muted-foreground sm:block">
+                                Pembatalan, penghapusan, dan potongan biaya di
+                                atas batas
+                            </p>
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                className="ml-auto"
+                                onClick={() =>
+                                    router.post(
+                                        '/aktivitas/tinjau-semua',
+                                        {},
+                                        { preserveScroll: true },
+                                    )
+                                }
+                            >
+                                Tandai semua diperiksa
+                            </Button>
+                        </div>
+                        <ul className="divide-y divide-lelang/15">
+                            {reviewQueue.map((a) => (
+                                <li
+                                    key={a.id}
+                                    className="flex flex-col gap-2 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+                                >
+                                    <div className="min-w-0">
+                                        <p className="text-sm">
+                                            <span className="font-semibold">
+                                                {a.actor}
+                                            </span>{' '}
+                                            <span className="text-muted-foreground">
+                                                {a.description.toLowerCase()}
+                                            </span>
+                                        </p>
+                                        <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
+                                            <span className="tabular-nums">
+                                                {formatDate(a.date)} · {a.time}
+                                            </span>
+                                            {a.subjectCode &&
+                                                (a.action === 'deleted' ? (
+                                                    <span className="font-medium text-foreground tabular-nums line-through">
+                                                        {a.subjectCode}
+                                                    </span>
+                                                ) : (
+                                                    <Link
+                                                        href={`/transaksi/${a.subjectCode}`}
+                                                        className="font-medium text-foreground tabular-nums hover:text-primary hover:underline"
+                                                    >
+                                                        {a.subjectCode}
+                                                    </Link>
+                                                ))}
+                                            {a.subjectLabel && (
+                                                <span className="truncate">
+                                                    · {a.subjectLabel}
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="shrink-0 self-start sm:self-auto"
+                                        onClick={() =>
+                                            router.post(
+                                                `/aktivitas/${a.id}/tinjau`,
+                                                {},
+                                                { preserveScroll: true },
+                                            )
+                                        }
+                                    >
+                                        <Check />
+                                        Sudah diperiksa
+                                    </Button>
+                                </li>
+                            ))}
+                        </ul>
+                        {reviewCount > reviewQueue.length && (
+                            <div className="border-t border-lelang/15 px-5 py-3">
+                                <Link
+                                    href="/aktivitas?flagged=1"
+                                    className="text-sm font-medium text-primary hover:underline"
+                                >
+                                    Lihat semua {reviewCount} catatan
+                                </Link>
+                            </div>
+                        )}
                     </section>
                 )}
 

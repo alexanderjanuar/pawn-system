@@ -71,6 +71,12 @@ class Transaction extends Model
     /** Loans strictly above this amount need Owner approval before disbursal. */
     public const APPROVAL_THRESHOLD = 5_000_000;
 
+    /**
+     * Default share of the fee a petugas may discount before the change is
+     * flagged for the owner to review. Overridable in settings; 0 turns it off.
+     */
+    public const MAX_DISCOUNT_PERCENT = 10;
+
     public function getRouteKeyName(): string
     {
         return 'code';

@@ -124,3 +124,33 @@ export function addDays(iso: string, days: number): string {
 
     return d.toISOString().slice(0, 10);
 }
+
+/**
+ * Readable Indonesian phone number, e.g. "0812-3344-5566". Numbers are stored
+ * as plain digits in one canonical shape, so the grouping is display-only.
+ */
+export function formatPhone(raw: string | null | undefined): string {
+    if (!raw) {
+        return '';
+    }
+
+    let digits = raw.replace(/\D+/g, '');
+
+    if (!digits) {
+        return '';
+    }
+
+    if (digits.startsWith('62')) {
+        digits = `0${digits.slice(2)}`;
+    } else if (digits.startsWith('8')) {
+        digits = `0${digits}`;
+    }
+
+    if (!digits.startsWith('0') || digits.length < 9) {
+        return digits;
+    }
+
+    return [digits.slice(0, 4), digits.slice(4, 8), digits.slice(8)]
+        .filter(Boolean)
+        .join('-');
+}

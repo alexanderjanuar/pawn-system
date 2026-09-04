@@ -1,8 +1,10 @@
 import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
-import { HandCoins, Plus, Search, SearchX } from 'lucide-react';
+import { HandCoins, Plus, Search, SearchX, Send, Wallet } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DatePicker } from '@/components/gadai/date-picker';
 import { PageHeader } from '@/components/gadai/page-header';
+import { PiutangPaymentDialog } from '@/components/piutang-payment-dialog';
+import { PiutangReminderDialog } from '@/components/piutang-reminder-dialog';
 import { TablePagination } from '@/components/table-pagination';
 import { Button } from '@/components/ui/button';
 import {
@@ -20,6 +22,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { usePagination } from '@/hooks/use-pagination';
 import { formatDate, formatRupiah, TODAY } from '@/lib/format';
+import type { NextDue } from '@/lib/reminder';
 import { cn } from '@/lib/utils';
 
 type PiutangStatus = 'berjalan' | 'lunas';
@@ -28,6 +31,7 @@ type Row = {
     id: number;
     code: string;
     debtorName: string;
+    debtorPhone: string | null;
     deviceName: string;
     price: number;
     downPayment: number;
@@ -37,6 +41,7 @@ type Row = {
     status: PiutangStatus;
     terminCount: number;
     late: boolean;
+    nextDue: NextDue | null;
     date: string;
     storeName: string | null;
     detailUrl: string;
@@ -48,7 +53,7 @@ type PageProps = {
     petugasList: string[];
 };
 
-type Filter = 'all' | 'berjalan' | 'lunas';
+type Filter = 'all' | 'berjalan' | 'telat' | 'lunas';
 
 export function StatusPill({ status }: { status: PiutangStatus }) {
     return (
@@ -85,7 +90,15 @@ export default function PiutangIndex({
         const q = query.trim().toLowerCase();
 
         return piutangs.filter((p) => {
-            if (filter !== 'all' && p.status !== filter) {
+            if (filter === 'telat' && !p.late) {
+                return false;
+            }
+
+            if (
+                filter !== 'all' &&
+                filter !== 'telat' &&
+                p.status !== filter
+            ) {
                 return false;
             }
 
@@ -111,12 +124,23 @@ export default function PiutangIndex({
         to,
     } = usePagination(filtered, 10);
 
-    const tabs: { key: Filter; label: string; count: number }[] = [
+    const tabs: {
+        key: Filter;
+        label: string;
+        count: number;
+        alert?: boolean;
+    }[] = [
         { key: 'all', label: 'Semua', count: piutangs.length },
         {
             key: 'berjalan',
             label: 'Berjalan',
             count: piutangs.filter((p) => p.status === 'berjalan').length,
+        },
+        {
+            key: 'telat',
+            label: 'Telat',
+            count: piutangs.filter((p) => p.late).length,
+            alert: true,
         },
         {
             key: 'lunas',
@@ -165,7 +189,9 @@ export default function PiutangIndex({
                                 'flex shrink-0 items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors',
                                 filter === tab.key
                                     ? 'border-transparent bg-primary text-primary-foreground'
-                                    : 'border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground',
+                                    : tab.alert && tab.count > 0
+                                      ? 'border-overdue/30 bg-overdue-soft/40 text-overdue hover:bg-overdue-soft'
+                                      : 'border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground',
                             )}
                         >
                             {tab.label}
@@ -174,7 +200,9 @@ export default function PiutangIndex({
                                     'rounded-full px-1.5 text-xs tabular-nums',
                                     filter === tab.key
                                         ? 'bg-primary-foreground/15'
-                                        : 'bg-muted',
+                                        : tab.alert && tab.count > 0
+                                          ? 'bg-overdue/15'
+                                          : 'bg-muted',
                                 )}
                             >
                                 {tab.count}
@@ -200,7 +228,7 @@ export default function PiutangIndex({
                 {/* Table */}
                 <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
                     <div className="overflow-x-auto">
-                        <table className="w-full min-w-[46rem] text-sm">
+                        <table className="w-full min-w-[58rem] text-sm">
                             <thead>
                                 <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
                                     <th className="px-5 py-3 font-medium">Kode</th>
@@ -216,6 +244,9 @@ export default function PiutangIndex({
                                     </th>
                                     <th className="px-5 py-3 font-medium">
                                         Status
+                                    </th>
+                                    <th className="px-5 py-3 text-right font-medium">
+                                        Aksi
                                     </th>
                                 </tr>
                             </thead>
@@ -279,6 +310,46 @@ export default function PiutangIndex({
                                                 )}
                                             </div>
                                         </td>
+                                        <td
+                                            className="px-5 py-3 text-right"
+                                            onClick={(e) => e.stopPropagation()}
+                                        >
+                                            {p.status === 'lunas' ? (
+                                                <span className="text-muted-foreground">
+                                                    —
+                                                </span>
+                                            ) : (
+                                                <div className="flex items-center justify-end gap-1">
+                                                    <PiutangPaymentDialog
+                                                        piutang={p}
+                                                    >
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            title="Catat pembayaran angsuran"
+                                                        >
+                                                            <Wallet />
+                                                            Bayar
+                                                        </Button>
+                                                    </PiutangPaymentDialog>
+                                                    <PiutangReminderDialog
+                                                        piutang={p}
+                                                    >
+                                                        <Button
+                                                            variant="ghost"
+                                                            size="icon"
+                                                            title={
+                                                                p.debtorPhone
+                                                                    ? 'Kirim pengingat WhatsApp'
+                                                                    : 'Peminjam belum punya nomor WhatsApp'
+                                                            }
+                                                        >
+                                                            <Send />
+                                                        </Button>
+                                                    </PiutangReminderDialog>
+                                                </div>
+                                            )}
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -341,6 +412,7 @@ function TambahPiutangDialog({ petugasList }: { petugasList: string[] }) {
     const [open, setOpen] = useState(false);
     const form = useForm({
         debtor_name: '',
+        debtor_phone: '',
         device_name: '',
         price: 0,
         down_payment: 0,
@@ -396,28 +468,51 @@ function TambahPiutangDialog({ petugasList }: { petugasList: string[] }) {
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4">
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="peminjam">Peminjam</Label>
-                        <Input
-                            id="peminjam"
-                            list="piutang-petugas"
-                            value={form.data.debtor_name}
-                            onChange={(e) =>
-                                form.setData('debtor_name', e.target.value)
-                            }
-                            placeholder="cth. Rina (karyawan) / nama pelanggan"
-                            autoFocus
-                        />
-                        <datalist id="piutang-petugas">
-                            {petugasList.map((p) => (
-                                <option key={p} value={p} />
-                            ))}
-                        </datalist>
-                        {form.errors.debtor_name && (
-                            <p className="text-xs text-destructive">
-                                {form.errors.debtor_name}
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="peminjam">Peminjam</Label>
+                            <Input
+                                id="peminjam"
+                                list="piutang-petugas"
+                                value={form.data.debtor_name}
+                                onChange={(e) =>
+                                    form.setData('debtor_name', e.target.value)
+                                }
+                                placeholder="cth. Rina (karyawan) / nama pelanggan"
+                                autoFocus
+                            />
+                            <datalist id="piutang-petugas">
+                                {petugasList.map((p) => (
+                                    <option key={p} value={p} />
+                                ))}
+                            </datalist>
+                            {form.errors.debtor_name && (
+                                <p className="text-xs text-destructive">
+                                    {form.errors.debtor_name}
+                                </p>
+                            )}
+                        </div>
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="peminjam-wa">No. WhatsApp</Label>
+                            <Input
+                                id="peminjam-wa"
+                                inputMode="tel"
+                                value={form.data.debtor_phone}
+                                onChange={(e) =>
+                                    form.setData('debtor_phone', e.target.value)
+                                }
+                                placeholder="cth. 081253721672"
+                                className="tabular-nums"
+                            />
+                            <p className="text-xs text-muted-foreground">
+                                Untuk kirim pengingat cicilan.
                             </p>
-                        )}
+                            {form.errors.debtor_phone && (
+                                <p className="text-xs text-destructive">
+                                    {form.errors.debtor_phone}
+                                </p>
+                            )}
+                        </div>
                     </div>
                     <div className="grid gap-1.5">
                         <Label htmlFor="hp">Nama HP</Label>

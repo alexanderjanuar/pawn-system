@@ -3,10 +3,12 @@
 namespace App\Models;
 
 use App\Support\ActiveStore;
+use App\Support\PhoneNumber;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -20,6 +22,7 @@ use Illuminate\Support\Carbon;
  * @property int|null $store_id
  * @property string $code
  * @property string $debtor_name
+ * @property string|null $debtor_phone
  * @property string $device_name
  * @property int $price
  * @property int $down_payment
@@ -29,11 +32,25 @@ use Illuminate\Support\Carbon;
  * @property string|null $notes
  */
 #[Fillable([
-    'store_id', 'code', 'debtor_name', 'device_name', 'price', 'down_payment',
+    'store_id', 'code', 'debtor_name', 'debtor_phone', 'device_name', 'price', 'down_payment',
     'date', 'status', 'clerk', 'notes',
 ])]
 class Piutang extends Model
 {
+    /**
+     * Store the debtor number in one canonical shape, whatever was typed.
+     *
+     * @return Attribute<string|null, string|null>
+     */
+    protected function debtorPhone(): Attribute
+    {
+        // A blank value keeps its shape ('' stays '', null stays null) so the
+        // column's own nullability contract is untouched.
+        return Attribute::set(fn (?string $value): ?string => blank($value)
+            ? $value
+            : PhoneNumber::normalize($value));
+    }
+
     protected function casts(): array
     {
         return [

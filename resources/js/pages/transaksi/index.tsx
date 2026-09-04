@@ -16,7 +16,13 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { usePagination } from '@/hooks/use-pagination';
-import { daysUntil, dueLabel, formatDate, formatRupiah } from '@/lib/format';
+import {
+    daysUntil,
+    dueLabel,
+    formatDate,
+    formatPhone,
+    formatRupiah,
+} from '@/lib/format';
 import { STATUS_META, STATUS_ORDER } from '@/lib/gadai';
 import { countByStatus } from '@/lib/selectors';
 import { cn } from '@/lib/utils';
@@ -83,7 +89,7 @@ export default function TransaksiIndex({
 
             if (q) {
                 const haystack =
-                    `${t.id} ${t.customer.name} ${t.customer.phone} ${t.device.name}`.toLowerCase();
+                    `${t.id} ${t.customer.name} ${t.customer.phone} ${formatPhone(t.customer.phone)} ${t.device.name}`.toLowerCase();
 
                 if (!haystack.includes(q)) {
                     return false;
@@ -313,7 +319,7 @@ export default function TransaksiIndex({
                                                 {t.customer.name}
                                             </div>
                                             <div className="text-xs text-muted-foreground tabular-nums">
-                                                {t.customer.phone}
+                                                {formatPhone(t.customer.phone)}
                                             </div>
                                         </td>
                                         <td className="px-4 py-3">

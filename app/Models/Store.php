@@ -2,9 +2,11 @@
 
 namespace App\Models;
 
+use App\Support\PhoneNumber;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Attributes\Scope;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Database\Eloquent\Casts\Attribute;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
@@ -23,6 +25,20 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['code', 'nota_prefix', 'name', 'address', 'phone', 'active'])]
 class Store extends Model
 {
+    /**
+     * Store the shop number in one canonical shape, whatever was typed.
+     *
+     * @return Attribute<string|null, string|null>
+     */
+    protected function phone(): Attribute
+    {
+        // A blank value keeps its shape ('' stays '', null stays null) so the
+        // column's own nullability contract is untouched.
+        return Attribute::set(fn (?string $value): ?string => blank($value)
+            ? $value
+            : PhoneNumber::normalize($value));
+    }
+
     protected function casts(): array
     {
         return [

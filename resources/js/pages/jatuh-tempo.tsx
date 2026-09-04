@@ -5,7 +5,13 @@ import { PageHeader } from '@/components/gadai/page-header';
 import { ReminderDialog } from '@/components/gadai/reminder-dialog';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
-import { daysUntil, dueLabel, formatDate, formatRupiah } from '@/lib/format';
+import {
+    daysUntil,
+    dueLabel,
+    formatDate,
+    formatPhone,
+    formatRupiah,
+} from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { Transaction } from '@/types/gadai';
 
@@ -155,7 +161,8 @@ function DueItem({ tx }: { tx: Transaction }) {
                     <StatusBadge status={tx.status} size="sm" />
                 </div>
                 <div className="truncate text-xs text-muted-foreground">
-                    {tx.device.name} · {tx.id} · {tx.customer.phone}
+                    {tx.device.name} · {tx.id} ·{' '}
+                    {formatPhone(tx.customer.phone)}
                 </div>
             </div>
 

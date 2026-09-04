@@ -16,6 +16,7 @@ createInertiaApp({
             case name === 'cek-status':
             case name === 'transaksi/nota':
             case name === 'laporan/cetak':
+            case name === 'rak/label':
                 return null;
             case name.startsWith('auth/'):
                 return AuthLayout;

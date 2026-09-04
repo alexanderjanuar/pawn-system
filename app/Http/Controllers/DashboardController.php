@@ -2,8 +2,11 @@
 
 namespace App\Http\Controllers;
 
+use App\Http\Resources\ActivityResource;
 use App\Http\Resources\TransactionResource;
+use App\Models\ActivityLog;
 use App\Models\Transaction;
+use App\Support\ActiveStore;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -30,9 +33,21 @@ class DashboardController extends Controller
             ->orderByDesc('created_at')
             ->get();
 
+        // Sensitive actions the owner has not worked through yet: cancelled
+        // extensions, deleted transactions, discounts beyond the allowed share.
+        $storeId = app(ActiveStore::class)->id();
+
+        $review = ActivityLog::query()
+            ->when($storeId !== null, fn ($query) => $query->where('store_id', $storeId))
+            ->needsReview();
+
         return Inertia::render('dashboard', [
             'transactions' => TransactionResource::collection($transactions),
             'pendingApprovals' => TransactionResource::collection($pending),
+            'reviewQueue' => ActivityResource::collection(
+                (clone $review)->latest()->limit(8)->get(),
+            ),
+            'reviewCount' => $review->count(),
         ]);
     }
 }

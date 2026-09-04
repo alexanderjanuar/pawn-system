@@ -25,10 +25,13 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { usePagination } from '@/hooks/use-pagination';
-import { formatDate, formatRupiah } from '@/lib/format';
+import { formatDate, formatPhone, formatRupiah } from '@/lib/format';
 import { customerStats, customerTransactions } from '@/lib/selectors';
 import { cn, initials } from '@/lib/utils';
 import type { Customer, Transaction } from '@/types/gadai';
+
+/** Quick tabs above the customer table. */
+type CustomerFilter = 'all' | 'aktif' | 'tidak-aktif' | 'blacklist';
 
 export default function PelangganIndex({
     customers,
@@ -38,35 +41,46 @@ export default function PelangganIndex({
     transactions: Transaction[];
 }) {
     const [query, setQuery] = useState('');
-    const [filter, setFilter] = useState<'all' | 'blacklist'>('all');
+    const [filter, setFilter] = useState<CustomerFilter>('all');
 
     const rows = useMemo(
         () =>
             customers.map((c) => ({
                 customer: c,
-                stats: customerStats(
-                    customerTransactions(transactions, c.phone),
-                ),
+                stats: customerStats(customerTransactions(transactions, c.id)),
             })),
         [customers, transactions],
     );
 
-    const blacklistCount = useMemo(
-        () => rows.filter((r) => r.customer.blacklisted).length,
+    const counts = useMemo(
+        () => ({
+            all: rows.length,
+            aktif: rows.filter((r) => r.stats.active > 0).length,
+            'tidak-aktif': rows.filter((r) => r.stats.active === 0).length,
+            blacklist: rows.filter((r) => r.customer.blacklisted).length,
+        }),
         [rows],
     );
 
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
 
-        return rows.filter(({ customer }) => {
+        return rows.filter(({ customer, stats }) => {
             if (filter === 'blacklist' && !customer.blacklisted) {
+                return false;
+            }
+
+            if (filter === 'aktif' && stats.active === 0) {
+                return false;
+            }
+
+            if (filter === 'tidak-aktif' && stats.active > 0) {
                 return false;
             }
 
             if (
                 q &&
-                !`${customer.name} ${customer.phone} ${customer.id}`
+                !`${customer.name} ${customer.phone} ${formatPhone(customer.phone)} ${customer.id}`
                     .toLowerCase()
                     .includes(q)
             ) {
@@ -129,12 +143,10 @@ export default function PelangganIndex({
                 <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
                     {(
                         [
-                            { key: 'all', label: 'Semua', count: rows.length },
-                            {
-                                key: 'blacklist',
-                                label: 'Blacklist',
-                                count: blacklistCount,
-                            },
+                            { key: 'all', label: 'Semua' },
+                            { key: 'aktif', label: 'Gadai Aktif' },
+                            { key: 'tidak-aktif', label: 'Tidak Aktif' },
+                            { key: 'blacklist', label: 'Blacklist' },
                         ] as const
                     ).map((tab) => (
                         <button
@@ -165,7 +177,7 @@ export default function PelangganIndex({
                                         : 'bg-muted',
                                 )}
                             >
-                                {tab.count}
+                                {counts[tab.key]}
                             </span>
                         </button>
                     ))}
@@ -254,7 +266,7 @@ export default function PelangganIndex({
                                             </div>
                                         </td>
                                         <td className="px-5 py-3 text-muted-foreground tabular-nums">
-                                            {customer.phone}
+                                            {formatPhone(customer.phone)}
                                         </td>
                                         <td className="px-5 py-3 text-right">
                                             {stats.active > 0 ? (

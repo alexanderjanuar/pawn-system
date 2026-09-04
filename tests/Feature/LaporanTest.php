@@ -98,3 +98,53 @@ test('laporan cetak renders the print page', function () {
             ->where('period.from', '2026-07-01'),
         );
 });
+
+test('the fee trend carries month boundaries so a bar can be clicked', function () {
+    $user = User::factory()->owner()->create();
+
+    $this->actingAs($user)
+        ->get('/laporan')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('laporan')
+            ->has('trend', 6)
+            // Six months ending with the running one.
+            ->where('trend.5.from', now()->startOfMonth()->toDateString())
+            ->where('trend.5.to', now()->endOfMonth()->toDateString())
+            ->where('trend.5.current', true)
+            ->where('trend.0.from', now()->startOfMonth()->subMonths(5)->toDateString())
+            ->where('trend.0.current', false)
+            ->has('trend.5.title'),
+        );
+});
+
+test('the report defaults to the running month', function () {
+    $user = User::factory()->owner()->create();
+
+    $this->actingAs($user)
+        ->get('/laporan')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('period.from', now()->startOfMonth()->toDateString())
+            ->where('period.to', now()->endOfMonth()->toDateString()),
+        );
+});
+
+test('clicking a trend bar narrows the report to that month', function () {
+    $user = User::factory()->owner()->create();
+    $lastMonth = now()->startOfMonth()->subMonth();
+
+    // Fee earned last month must not leak into a report scoped to it.
+    $tx = makeTransaction('GCG-TREND-1', $lastMonth->toDateString());
+    $tx->events()->create([
+        'type' => 'extended',
+        'event_date' => $lastMonth->copy()->addDays(3)->toDateString(),
+        'title' => 'Perpanjang',
+        'amount' => 150_000,
+    ]);
+
+    $this->actingAs($user)
+        ->get('/laporan?from='.$lastMonth->toDateString().'&to='.$lastMonth->copy()->endOfMonth()->toDateString())
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('period.from', $lastMonth->toDateString())
+            ->where('feeIncome.perpanjang', 150_000),
+        );
+});

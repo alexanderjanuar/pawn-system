@@ -6,7 +6,7 @@ import { parsePattern } from '@/components/gadai/pattern-lock';
 import { TransactionQr } from '@/components/gadai/transaction-qr';
 import { Button } from '@/components/ui/button';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { formatDate, formatRupiah } from '@/lib/format';
+import { formatDate, formatPhone, formatRupiah } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { Transaction } from '@/types/gadai';
 
@@ -190,7 +190,7 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
                 <Row
                     half={half}
                     label="No. HP Pelanggan"
-                    value={tx.customer.phone}
+                    value={formatPhone(tx.customer.phone)}
                 />
                 <Row half={half} label="Nama Pemilik" value={tx.deviceOwner} />
                 <Row half={half} label="Alamat" value={tx.customer.address} />
@@ -293,9 +293,7 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
             <div
                 className={cn(
                     'grid grid-cols-2',
-                    half
-                        ? 'mt-3 gap-3 text-[9px]'
-                        : 'mt-6 gap-8 text-sm',
+                    half ? 'mt-3 gap-3 text-[9px]' : 'mt-6 gap-8 text-sm',
                 )}
             >
                 <div>

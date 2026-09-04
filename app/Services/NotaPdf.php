@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Transaction;
+use App\Support\PhoneNumber;
 use Barryvdh\DomPDF\Facade\Pdf as PdfFacade;
 use Barryvdh\DomPDF\PDF;
 use Carbon\CarbonInterface;
@@ -54,7 +55,7 @@ class NotaPdf
             'code' => $t->code,
             'statusUrl' => route('cek-status', ['kode' => $t->code]),
             'customerName' => $t->customer->name,
-            'customerPhone' => $t->customer->phone ?: '-',
+            'customerPhone' => PhoneNumber::format($t->customer->phone) ?: '-',
             'customerAddress' => $t->customer->address ?: '-',
             'deviceOwner' => $t->device_owner ?: $t->customer->name,
             'deviceName' => $t->device_name,

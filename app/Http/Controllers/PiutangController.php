@@ -7,6 +7,7 @@ use App\Models\Clerk;
 use App\Models\Piutang;
 use App\Models\PiutangPayment;
 use App\Models\Store;
+use App\Services\Fonnte;
 use App\Support\ActiveStore;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -31,15 +32,25 @@ class PiutangController extends Controller
             $paid = (int) ($p->paid ?? 0);
             $financed = max(0, $p->price - $p->down_payment);
 
-            // Any termin past due and not yet covered by payments (applied in order).
+            // The first termin not yet covered by payments (applied in order) is
+            // what the debtor owes next, and it is late once its date has passed.
             $late = false;
+            $nextDue = null;
+
             if ($p->status !== 'lunas') {
-                $remaining = $paid;
+                $unapplied = $paid;
+
                 foreach ($p->termins as $t) {
-                    $applied = min($t->amount, max(0, $remaining));
-                    $remaining -= $applied;
-                    if ($applied < $t->amount && $t->due_date->lt($today)) {
-                        $late = true;
+                    $applied = min($t->amount, max(0, $unapplied));
+                    $unapplied -= $applied;
+
+                    if ($applied < $t->amount) {
+                        $late = $t->due_date->lt($today);
+                        $nextDue = [
+                            'seq' => $t->seq,
+                            'amount' => $t->amount - $applied,
+                            'dueDate' => $t->due_date->format('Y-m-d'),
+                        ];
                         break;
                     }
                 }
@@ -49,6 +60,7 @@ class PiutangController extends Controller
                 'id' => $p->id,
                 'code' => $p->code,
                 'debtorName' => $p->debtor_name,
+                'debtorPhone' => $p->debtor_phone,
                 'deviceName' => $p->device_name,
                 'price' => $p->price,
                 'downPayment' => $p->down_payment,
@@ -58,6 +70,7 @@ class PiutangController extends Controller
                 'status' => $p->status,
                 'terminCount' => $p->termins->count(),
                 'late' => $late,
+                'nextDue' => $nextDue,
                 'date' => $p->date->format('Y-m-d'),
                 'storeName' => $p->store?->name,
                 'detailUrl' => route('piutang.show', $p),
@@ -90,6 +103,7 @@ class PiutangController extends Controller
                 'id' => $piutang->id,
                 'code' => $piutang->code,
                 'debtorName' => $piutang->debtor_name,
+                'debtorPhone' => $piutang->debtor_phone,
                 'deviceName' => $piutang->device_name,
                 'price' => $piutang->price,
                 'downPayment' => $piutang->down_payment,
@@ -124,6 +138,7 @@ class PiutangController extends Controller
 
         $data = $request->validate([
             'debtor_name' => ['required', 'string', 'max:120'],
+            'debtor_phone' => ['nullable', 'string', 'max:30'],
             'device_name' => ['required', 'string', 'max:120'],
             'price' => ['required', 'integer', 'min:1'],
             'down_payment' => ['nullable', 'integer', 'min:0', 'lte:price'],
@@ -139,6 +154,7 @@ class PiutangController extends Controller
             'store_id' => $storeId,
             'code' => Piutang::nextCode($store, now()),
             'debtor_name' => $data['debtor_name'],
+            'debtor_phone' => blank($data['debtor_phone'] ?? null) ? null : $data['debtor_phone'],
             'device_name' => $data['device_name'],
             'price' => $data['price'],
             'down_payment' => $data['down_payment'] ?? 0,
@@ -163,6 +179,7 @@ class PiutangController extends Controller
     {
         $data = $request->validate([
             'debtor_name' => ['required', 'string', 'max:120'],
+            'debtor_phone' => ['nullable', 'string', 'max:30'],
             'device_name' => ['required', 'string', 'max:120'],
             'price' => ['required', 'integer', 'min:1'],
             'down_payment' => ['nullable', 'integer', 'min:0', 'lte:price'],
@@ -171,6 +188,7 @@ class PiutangController extends Controller
         ]);
 
         $data['down_payment'] ??= 0;
+        $data['debtor_phone'] = blank($data['debtor_phone'] ?? null) ? null : $data['debtor_phone'];
         $piutang->update($data);
 
         // Keep the termin schedule in step with an edited total/date.
@@ -205,6 +223,35 @@ class PiutangController extends Controller
         return back()->with('success', $count >= 2
             ? "Jadwal {$count}x termin dibuat."
             : 'Jadwal termin dihapus.');
+    }
+
+    /**
+     * Send one WhatsApp instalment reminder to the debtor, straight from the
+     * piutang list so the clerk does not have to open each record first.
+     */
+    public function remind(Request $request, Piutang $piutang): RedirectResponse
+    {
+        $data = $request->validate([
+            'message' => ['required', 'string', 'max:2000'],
+        ]);
+
+        if (blank($piutang->debtor_phone)) {
+            return back()->with('error', 'Peminjam belum memiliki nomor WhatsApp.');
+        }
+
+        if (! app(Fonnte::class)->send($piutang->debtor_phone, $data['message'])) {
+            return back()->with('error', 'Pengingat gagal dikirim. Periksa koneksi atau pengaturan WhatsApp.');
+        }
+
+        ActivityLog::record(
+            'updated',
+            'piutang',
+            $piutang->code,
+            $piutang->debtor_name,
+            'Mengirim pengingat WhatsApp',
+        );
+
+        return back()->with('success', "Pengingat terkirim ke {$piutang->debtor_name}.");
     }
 
     public function destroy(Piutang $piutang): RedirectResponse

@@ -267,6 +267,8 @@ class GadaiController extends Controller
         $rakId = $data['rak_id'] ?? null;
         $newRakName = $rakId ? (Rak::find($rakId)?->name ?? '—') : '—';
 
+        $feeBefore = (int) $transaction->fee;
+
         $before = [
             'Pelanggan' => $transaction->customer->name,
             'Petugas' => $transaction->clerk,
@@ -337,6 +339,7 @@ class GadaiController extends Controller
                 $customer->name,
                 $description,
                 $changes,
+                $this->exceedsDiscountLimit($feeBefore, (int) $terms['fee']),
             );
         }
 
@@ -368,6 +371,8 @@ class GadaiController extends Controller
             $code,
             $customerName,
             'Menghapus transaksi',
+            null,
+            true,
         );
 
         return redirect()
@@ -411,6 +416,7 @@ class GadaiController extends Controller
             ? (int) round($fee / $transaction->principal * 100)
             : 0;
         $reason = trim((string) ($data['reason'] ?? ''));
+        $feeBefore = (int) $transaction->fee;
 
         $transaction->update([
             'status' => 'DIAMBIL',
@@ -431,12 +437,16 @@ class GadaiController extends Controller
             'wallet_id' => $this->resolveWallet($data['wallet_id'] ?? null),
         ]);
 
+        $overLimit = $adjusted && $this->exceedsDiscountLimit($feeBefore, $fee);
+
         ActivityLog::record(
             'updated',
             'transaction',
             $transaction->code,
             $transaction->customer->name,
             'Menebus & mengambil barang'.($adjusted ? " (biaya disesuaikan: {$reason})" : ''),
+            null,
+            $overLimit,
         );
 
         return back()->with('success', "Transaksi {$transaction->code} ditebus & diambil.");
@@ -545,6 +555,8 @@ class GadaiController extends Controller
             $transaction->code,
             $transaction->customer->name,
             'Membatalkan perpanjangan (jatuh tempo kembali ke '.$previousDue->format('Y-m-d').')',
+            null,
+            true,
         );
 
         return back()->with('success', "Perpanjangan {$transaction->code} dibatalkan.");
@@ -801,6 +813,8 @@ class GadaiController extends Controller
             $transaction->code,
             $transaction->customer->name,
             'Membatalkan lelang',
+            null,
+            true,
         );
 
         return back()->with('success', "Transaksi {$transaction->code} dikembalikan dari lelang.");
@@ -841,6 +855,28 @@ class GadaiController extends Controller
         );
 
         return back()->with('success', "Penjualan {$transaction->code} dicatat.");
+    }
+
+    /**
+     * Whether a fee was cut by more than the owner's allowed share. The limit
+     * lives in settings (percent of the original fee); 0 turns the check off.
+     * Management is trusted, so only a petugas can trip it.
+     */
+    private function exceedsDiscountLimit(int $feeBefore, int $feeAfter): bool
+    {
+        $limit = (int) Setting::get('max_discount_percent', Transaction::MAX_DISCOUNT_PERCENT);
+
+        if ($limit <= 0 || $feeBefore <= 0 || $feeAfter >= $feeBefore) {
+            return false;
+        }
+
+        if (request()->user()?->isManagement()) {
+            return false;
+        }
+
+        $cutPercent = ($feeBefore - $feeAfter) / $feeBefore * 100;
+
+        return $cutPercent > $limit;
     }
 
     private function rupiah(int $amount): string
@@ -1022,13 +1058,28 @@ class GadaiController extends Controller
      */
     private function rakOptions(?int $storeId): array
     {
-        return Rak::query()
-            ->active()
-            ->when($storeId !== null, fn ($query) => $query->where('store_id', $storeId))
-            ->orderBy('name')
-            ->get(['id', 'name'])
-            ->map(fn (Rak $rak): array => ['id' => $rak->id, 'name' => $rak->name])
-            ->all();
+        $racks = Rak::sortNaturally(
+            Rak::query()
+                ->active()
+                ->when($storeId !== null, fn ($query) => $query->where('store_id', $storeId))
+                ->withCount(['transactions as held_count' => fn ($query) => $query->held()])
+                ->get()
+        );
+
+        // Suggest the emptiest rack that still has room, so phones spread out
+        // instead of piling onto whichever rack the clerk happens to remember.
+        $suggested = $racks
+            ->filter(fn (Rak $rak): bool => $rak->capacity === null || $rak->held_count < $rak->capacity)
+            ->sortBy('held_count')
+            ->first();
+
+        return $racks->map(fn (Rak $rak): array => [
+            'id' => $rak->id,
+            'name' => $rak->name,
+            'count' => (int) $rak->held_count,
+            'capacity' => $rak->capacity,
+            'recommended' => $suggested !== null && $rak->id === $suggested->id,
+        ])->all();
     }
 
     /**

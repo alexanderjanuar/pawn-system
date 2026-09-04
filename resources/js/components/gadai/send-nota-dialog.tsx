@@ -12,6 +12,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { formatPhone } from '@/lib/format';
 import { buildNotaMessage } from '@/lib/nota-message';
 import type { Transaction } from '@/types/gadai';
 
@@ -65,7 +66,7 @@ export function SendNotaDialog({
                             <>
                                 Link nota dikirim ke {tx.customer.name} ·{' '}
                                 <span className="tabular-nums">
-                                    {tx.customer.phone}
+                                    {formatPhone(tx.customer.phone)}
                                 </span>
                             </>
                         )}
@@ -74,12 +75,14 @@ export function SendNotaDialog({
 
                 {noPhone ? (
                     <p className="rounded-lg border border-overdue/30 bg-overdue-soft/40 p-3 text-sm text-muted-foreground">
-                        Tambahkan nomor telepon di data pelanggan terlebih dahulu
-                        sebelum mengirim nota.
+                        Tambahkan nomor telepon di data pelanggan terlebih
+                        dahulu sebelum mengirim nota.
                     </p>
                 ) : (
                     <div className="grid gap-1.5">
-                        <Label htmlFor="nota-message">Pesan (bisa diedit)</Label>
+                        <Label htmlFor="nota-message">
+                            Pesan (bisa diedit)
+                        </Label>
                         <Textarea
                             id="nota-message"
                             value={data.message}

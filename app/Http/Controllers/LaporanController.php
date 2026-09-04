@@ -588,8 +588,12 @@ class LaporanController extends Controller
             $key = $cursor->format('Y-m');
             $months[] = [
                 'label' => $labels[$cursor->month - 1],
+                'title' => $labels[$cursor->month - 1].' '.$cursor->year,
                 'value' => (int) ($byMonth[$key] ?? 0),
                 'current' => $cursor->isSameMonth(now()),
+                // Lets the report jump straight to this month when its bar is clicked.
+                'from' => $cursor->copy()->startOfMonth()->toDateString(),
+                'to' => $cursor->copy()->endOfMonth()->toDateString(),
             ];
             $cursor = $cursor->addMonth();
         }

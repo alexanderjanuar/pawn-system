@@ -54,7 +54,13 @@ import {
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
-import { addDays, formatDate, formatRupiah, TODAY } from '@/lib/format';
+import {
+    addDays,
+    formatDate,
+    formatPhone,
+    formatRupiah,
+    TODAY,
+} from '@/lib/format';
 import {
     computeFee,
     PHOTO_LABELS,
@@ -108,6 +114,16 @@ function tenorChoiceOf(tx: Transaction): TenorChoice {
     return 'custom';
 }
 
+/** One rack the clerk can pick, with how full it is. */
+export type RakOption = {
+    id: number;
+    name: string;
+    count: number;
+    capacity: number | null;
+    /** The emptiest rack with room; pre-selected for a new gadai. */
+    recommended: boolean;
+};
+
 export function GadaiForm({
     mode,
     customers,
@@ -121,7 +137,7 @@ export function GadaiForm({
     mode: 'create' | 'edit';
     customers: Customer[];
     petugasList: string[];
-    rakList: { id: number; name: string }[];
+    rakList: RakOption[];
     transaction?: Transaction;
     /** Next auto number for `today` (create mode), e.g. GCG-20260730-0001. */
     suggestedCode?: string;
@@ -183,7 +199,9 @@ export function GadaiForm({
         kelengkapan: transaction?.device.kelengkapan ?? '',
         status: transaction?.status ?? 'AKTIF',
         clerk: transaction?.clerk ?? '',
-        rak_id: transaction?.rakId ? String(transaction.rakId) : 'none',
+        rak_id: transaction?.rakId
+            ? String(transaction.rakId)
+            : (rakList.find((r) => r.recommended)?.id.toString() ?? 'none'),
         principal: transaction?.principal ?? 0,
         tenor_choice: (transaction
             ? tenorChoiceOf(transaction)
@@ -1491,7 +1509,7 @@ export function GadaiForm({
                                     hint={
                                         rakList.length === 0
                                             ? 'Belum ada rak. Tambahkan di menu Rak.'
-                                            : 'Rak fisik tempat HP disimpan'
+                                            : 'Rak fisik tempat HP disimpan. Rak paling longgar sudah dipilihkan.'
                                     }
                                 >
                                     <Select
@@ -1515,7 +1533,19 @@ export function GadaiForm({
                                                     key={r.id}
                                                     value={String(r.id)}
                                                 >
-                                                    {r.name}
+                                                    <span>{r.name}</span>
+                                                    <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+                                                        {r.count}
+                                                        {r.capacity != null
+                                                            ? `/${r.capacity}`
+                                                            : ''}
+                                                        {r.capacity != null &&
+                                                        r.count >= r.capacity
+                                                            ? ' · penuh'
+                                                            : r.recommended
+                                                              ? ' · disarankan'
+                                                              : ''}
+                                                    </span>
                                                 </SelectItem>
                                             ))}
                                         </SelectContent>
@@ -1691,9 +1721,9 @@ export function GadaiForm({
                                         </p>
                                     ) : (
                                         <p className="text-xs text-muted-foreground">
-                                            Wajib diisi karena dana/biaya diubah.
-                                            Tercatat di Riwayat & Aktivitas untuk
-                                            audit.
+                                            Wajib diisi karena dana/biaya
+                                            diubah. Tercatat di Riwayat &
+                                            Aktivitas untuk audit.
                                         </p>
                                     )}
                                 </div>
@@ -2033,7 +2063,9 @@ function SelectedCustomerCard({
                     </span>
                 </div>
                 <div className="mt-1 grid gap-x-4 gap-y-0.5 text-xs text-muted-foreground sm:grid-cols-2">
-                    <span className="tabular-nums">{customer.phone}</span>
+                    <span className="tabular-nums">
+                        {formatPhone(customer.phone)}
+                    </span>
                     <span className="tabular-nums">
                         KTP: {customer.idNumber}
                     </span>

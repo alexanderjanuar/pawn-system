@@ -56,6 +56,7 @@ type Piutang = {
     id: number;
     code: string;
     debtorName: string;
+    debtorPhone: string | null;
     deviceName: string;
     price: number;
     downPayment: number;
@@ -535,6 +536,7 @@ function EditPiutangDialog({
 }) {
     const form = useForm({
         debtor_name: piutang.debtorName,
+        debtor_phone: piutang.debtorPhone ?? '',
         device_name: piutang.deviceName,
         price: piutang.price,
         down_payment: piutang.downPayment,
@@ -560,15 +562,32 @@ function EditPiutangDialog({
                     </DialogDescription>
                 </DialogHeader>
                 <div className="grid gap-4">
-                    <div className="grid gap-1.5">
-                        <Label htmlFor="edit-peminjam">Peminjam</Label>
-                        <Input
-                            id="edit-peminjam"
-                            value={form.data.debtor_name}
-                            onChange={(e) =>
-                                form.setData('debtor_name', e.target.value)
-                            }
-                        />
+                    <div className="grid gap-4 sm:grid-cols-2">
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="edit-peminjam">Peminjam</Label>
+                            <Input
+                                id="edit-peminjam"
+                                value={form.data.debtor_name}
+                                onChange={(e) =>
+                                    form.setData('debtor_name', e.target.value)
+                                }
+                            />
+                        </div>
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="edit-peminjam-wa">
+                                No. WhatsApp
+                            </Label>
+                            <Input
+                                id="edit-peminjam-wa"
+                                inputMode="tel"
+                                value={form.data.debtor_phone}
+                                onChange={(e) =>
+                                    form.setData('debtor_phone', e.target.value)
+                                }
+                                placeholder="cth. 081253721672"
+                                className="tabular-nums"
+                            />
+                        </div>
                     </div>
                     <div className="grid gap-1.5">
                         <Label htmlFor="edit-hp">Nama HP</Label>

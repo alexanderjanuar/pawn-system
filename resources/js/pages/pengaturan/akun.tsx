@@ -82,6 +82,9 @@ export default function KelolaAkun({
             account={u}
             isSelf={u.id === currentUserId}
             onEdit={() => setEditTarget(u)}
+            onActivity={() =>
+                router.visit(`/aktivitas?actor=${encodeURIComponent(u.name)}`)
+            }
             onPassword={() => setPasswordTarget(u)}
             onToggle={() => toggleActive(u)}
             onDelete={() => setDeleteTarget(u)}
@@ -311,6 +314,7 @@ function RowActions({
     account,
     isSelf,
     onEdit,
+    onActivity,
     onPassword,
     onToggle,
     onDelete,
@@ -318,6 +322,7 @@ function RowActions({
     account: Account;
     isSelf: boolean;
     onEdit: () => void;
+    onActivity: () => void;
     onPassword: () => void;
     onToggle: () => void;
     onDelete: () => void;
@@ -330,6 +335,10 @@ function RowActions({
                 </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+                <DropdownMenuItem onSelect={onActivity}>
+                    Lihat aktivitas di log
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={onEdit}>Edit</DropdownMenuItem>
                 <DropdownMenuItem onSelect={onPassword}>
                     Reset kata sandi
@@ -715,7 +724,9 @@ function ResetPasswordDialog({
                         id="new-password"
                         type="text"
                         value={form.data.password}
-                        onChange={(e) => form.setData('password', e.target.value)}
+                        onChange={(e) =>
+                            form.setData('password', e.target.value)
+                        }
                         placeholder="Minimal 8 karakter"
                         className="tabular-nums"
                         autoFocus

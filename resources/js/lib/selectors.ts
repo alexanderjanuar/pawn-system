@@ -33,10 +33,10 @@ export function runningTransactions(txs: Transaction[]): Transaction[] {
 /** A customer's transactions (matched by phone), newest first. */
 export function customerTransactions(
     txs: Transaction[],
-    phone: string,
+    customerCode: string,
 ): Transaction[] {
     return txs
-        .filter((t) => t.customer.phone === phone)
+        .filter((t) => t.customerCode === customerCode)
         .sort((a, b) => b.startDate.localeCompare(a.startDate));
 }
 

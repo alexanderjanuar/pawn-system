@@ -49,6 +49,9 @@ export default function KelolaPetugas({ petugas }: { petugas: Petugas[] }) {
         <RowActions
             petugas={p}
             onView={() => router.visit(`/pengaturan/petugas/${p.id}`)}
+            onActivity={() =>
+                router.visit(`/aktivitas?actor=${encodeURIComponent(p.name)}`)
+            }
             onToggle={() => toggleActive(p)}
             onRename={() => setRenameTarget(p)}
             onDelete={() => setDeleteTarget(p)}
@@ -249,12 +252,14 @@ function StatusPill({ active }: { active: boolean }) {
 function RowActions({
     petugas,
     onView,
+    onActivity,
     onToggle,
     onRename,
     onDelete,
 }: {
     petugas: Petugas;
     onView: () => void;
+    onActivity: () => void;
     onToggle: () => void;
     onRename: () => void;
     onDelete: () => void;
@@ -268,7 +273,10 @@ function RowActions({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
                 <DropdownMenuItem onSelect={onView}>
-                    Lihat detail
+                    Lihat detail & riwayat transaksi
+                </DropdownMenuItem>
+                <DropdownMenuItem onSelect={onActivity}>
+                    Lihat aktivitas di log
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onSelect={onRename}>
@@ -456,7 +464,8 @@ function HapusPetugasDialog({
                         {petugas.transactionCount > 0
                             ? `${petugas.transactionCount} transaksi lama`
                             : 'transaksi lama'}{' '}
-                        tetap tersimpan, hanya tidak lagi muncul sebagai pilihan.
+                        tetap tersimpan, hanya tidak lagi muncul sebagai
+                        pilihan.
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>

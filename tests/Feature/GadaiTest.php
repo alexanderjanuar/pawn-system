@@ -102,7 +102,8 @@ test('a gadai creates a new customer when needed', function () {
         'start_date' => '2026-07-20',
     ])->assertRedirect();
 
-    $customer = Customer::where('phone', '0812-0000-0000')->first();
+    // "0812-0000-0000" is stored in the canonical shape, without separators.
+    $customer = Customer::where('phone', '081200000000')->first();
     expect($customer)->not->toBeNull()
         ->and($customer->code)->toStartWith('PLG-');
 

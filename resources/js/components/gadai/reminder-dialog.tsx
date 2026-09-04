@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
+import { formatPhone } from '@/lib/format';
 import { buildReminderMessage } from '@/lib/reminder';
 import type { Transaction } from '@/types/gadai';
 
@@ -70,7 +71,7 @@ export function ReminderDialog({
                             <>
                                 Dikirim ke {tx.customer.name} ·{' '}
                                 <span className="tabular-nums">
-                                    {tx.customer.phone}
+                                    {formatPhone(tx.customer.phone)}
                                 </span>
                             </>
                         )}
@@ -79,8 +80,8 @@ export function ReminderDialog({
 
                 {noPhone ? (
                     <p className="rounded-lg border border-overdue/30 bg-overdue-soft/40 p-3 text-sm text-muted-foreground">
-                        Tambahkan nomor telepon di data pelanggan terlebih dahulu
-                        sebelum mengirim pengingat.
+                        Tambahkan nomor telepon di data pelanggan terlebih
+                        dahulu sebelum mengirim pengingat.
                     </p>
                 ) : (
                     <div className="grid gap-1.5">

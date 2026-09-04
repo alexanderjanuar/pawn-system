@@ -158,3 +158,69 @@ test('the aktivitas page lists activities', function () {
 test('guests cannot access aktivitas', function () {
     $this->get('/aktivitas')->assertRedirect(route('login'));
 });
+
+/** One raw audit row, so the actor and wording are exact. */
+function auditLog(string $actor, string $action, string $code, string $label, string $description): ActivityLog
+{
+    return ActivityLog::create([
+        'actor' => $actor, 'action' => $action, 'subject_type' => 'transaction',
+        'subject_code' => $code, 'subject_label' => $label, 'description' => $description,
+    ]);
+}
+
+test('the aktivitas log can be searched by code or customer name', function () {
+    $user = User::factory()->owner()->create();
+    auditLog('Rina', 'created', 'GCG-20260720-0001', 'Budi', 'Membuat transaksi');
+    auditLog('Atul', 'created', 'GCG-20260720-0002', 'Sari', 'Membuat transaksi');
+
+    $this->actingAs($user)
+        ->get('/aktivitas?q=Sari')
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('activities', 1)
+            ->where('activities.0.subjectCode', 'GCG-20260720-0002')
+            ->where('total', 1),
+        );
+});
+
+test('the aktivitas log can be filtered by petugas', function () {
+    $user = User::factory()->owner()->create();
+    auditLog('Rina', 'created', 'GCG-1', 'Budi', 'Membuat transaksi');
+    auditLog('Atul', 'created', 'GCG-2', 'Sari', 'Membuat transaksi');
+    auditLog('Atul', 'updated', 'GCG-2', 'Sari', 'Menebus & mengambil barang');
+
+    $this->actingAs($user)
+        ->get('/aktivitas?actor=Atul')
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('activities', 2)
+            ->where('activities.0.actor', 'Atul')
+            ->where('activities.1.actor', 'Atul'),
+        );
+});
+
+test('the aktivitas log can be narrowed to a sensitive action type', function () {
+    $user = User::factory()->owner()->create();
+    auditLog('Rina', 'updated', 'GCG-1', 'Budi', 'Membatalkan perpanjangan (jatuh tempo kembali ke 2026-08-04)');
+    auditLog('Rina', 'updated', 'GCG-2', 'Sari', 'Mengirim pengingat WhatsApp');
+    auditLog('Rina', 'created', 'GCG-3', 'Doni', 'Membuat transaksi');
+
+    $this->actingAs($user)
+        ->get('/aktivitas?category=pembatalan')
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('activities', 1)
+            ->where('activities.0.subjectCode', 'GCG-1')
+            ->where('activities.0.category', 'pembatalan')
+            ->where('total', 1),
+        );
+});
+
+test('an edited nominal is categorised as a data change', function () {
+    $user = User::factory()->owner()->create();
+    auditLog('Rina', 'updated', 'GCG-1', 'Budi', 'Mengubah Biaya titipan (Alasan: Diskon khusus)');
+
+    $this->actingAs($user)
+        ->get('/aktivitas?category=nominal')
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('activities', 1)
+            ->where('activities.0.category', 'nominal'),
+        );
+});

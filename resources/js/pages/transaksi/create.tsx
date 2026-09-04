@@ -1,4 +1,5 @@
 import { GadaiForm } from '@/components/gadai/gadai-form';
+import type { RakOption } from '@/components/gadai/gadai-form';
 import type { Customer } from '@/types/gadai';
 
 export default function GadaiCreate({
@@ -11,7 +12,7 @@ export default function GadaiCreate({
 }: {
     customers: Customer[];
     petugasList: string[];
-    rakList: { id: number; name: string }[];
+    rakList: RakOption[];
     suggestedCode: string;
     notaPrefix: string;
     today: string;

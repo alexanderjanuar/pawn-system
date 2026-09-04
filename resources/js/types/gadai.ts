@@ -120,6 +120,12 @@ export type Activity = {
     subjectCode: string | null;
     subjectLabel: string | null;
     description: string;
+    /** Coarse bucket for filtering, e.g. 'pembatalan'. Null when it fits none. */
+    category: string | null;
+    /** Sensitive enough that the owner should look at it. */
+    flagged: boolean;
+    reviewedAt: string | null;
+    reviewedBy: string | null;
     changes: ActivityChange[];
     date: string; // YYYY-MM-DD
     time: string; // HH.mm

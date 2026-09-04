@@ -19,11 +19,12 @@ class RakController extends Controller
     {
         $activeId = app(ActiveStore::class)->id();
 
-        $racks = Rak::query()
-            ->with('store')
-            ->when($activeId !== null, fn ($query) => $query->where('store_id', $activeId))
-            ->orderBy('name')
-            ->get();
+        $racks = Rak::sortNaturally(
+            Rak::query()
+                ->with('store')
+                ->when($activeId !== null, fn ($query) => $query->where('store_id', $activeId))
+                ->get()
+        );
 
         // Phones currently on each rack (still held), grouped by rak_id.
         $held = Transaction::query()
@@ -42,6 +43,8 @@ class RakController extends Controller
                     'device' => $t->device_name,
                     'customer' => $t->customer->name,
                     'status' => $t->status,
+                    'dueDate' => $t->due_date->format('Y-m-d'),
+                    'overdue' => $this->isOverdue($t),
                     'detailUrl' => route('transaksi.show', $t),
                 ])->values();
 
@@ -52,10 +55,26 @@ class RakController extends Controller
                     'active' => $rak->active,
                     'storeName' => $rak->store?->name,
                     'count' => $items->count(),
+                    'overdueCount' => $items->where('overdue', true)->count(),
                     'items' => $items,
                 ];
             }),
             'canManage' => $request->user()->isManagement(),
+        ]);
+    }
+
+    /**
+     * A printable shelf label for one rack, opened in its own tab.
+     */
+    public function label(Rak $rak): Response
+    {
+        return Inertia::render('rak/label', [
+            'rak' => [
+                'name' => $rak->name,
+                'capacity' => $rak->capacity,
+                'storeName' => $rak->store?->name,
+                'count' => $rak->transactions()->held()->count(),
+            ],
         ]);
     }
 
@@ -152,6 +171,63 @@ class RakController extends Controller
         );
 
         return back()->with('success', "{$transaction->device_name} dipindahkan ke {$to}.");
+    }
+
+    /**
+     * Move every phone currently on one rack to another rack (or off the rack),
+     * for when a shelf is being cleared or rearranged. Each phone still gets its
+     * own history entry so the audit trail stays complete.
+     */
+    public function moveAll(Request $request, Rak $rak): RedirectResponse
+    {
+        $data = $request->validate([
+            'rak_id' => ['nullable', 'integer', 'exists:raks,id'],
+        ]);
+
+        $targetId = $data['rak_id'] ?? null;
+
+        if ($targetId === $rak->id) {
+            return back()->with('error', 'Rak tujuan sama dengan rak asal.');
+        }
+
+        $targetRak = $targetId ? Rak::find($targetId) : null;
+
+        if ($targetRak !== null && $targetRak->store_id !== $rak->store_id) {
+            return back()->with('error', 'Rak tujuan bukan dari toko yang sama.');
+        }
+
+        $items = $rak->transactions()->held()->with('customer')->get();
+
+        if ($items->isEmpty()) {
+            return back()->with('error', "Rak {$rak->name} tidak berisi HP.");
+        }
+
+        $to = $targetRak?->name ?? 'Tanpa rak';
+
+        foreach ($items as $transaction) {
+            $transaction->update(['rak_id' => $targetId]);
+
+            ActivityLog::record(
+                'updated',
+                'transaction',
+                $transaction->code,
+                $transaction->customer->name,
+                "Memindahkan rak: {$rak->name} → {$to}",
+                [['field' => 'Rak', 'from' => $rak->name, 'to' => $to]],
+            );
+        }
+
+        return back()->with('success', "{$items->count()} HP dipindahkan dari {$rak->name} ke {$to}.");
+    }
+
+    /**
+     * Due today or already past due, matching the Jatuh Tempo list. A phone
+     * already flagged "Tidak Diambil" is a decision taken, not a to-do.
+     */
+    private function isOverdue(Transaction $transaction): bool
+    {
+        return in_array($transaction->status, ['AKTIF', 'PERPANJANG'], true)
+            && $transaction->due_date->startOfDay()->lte(now()->startOfDay());
     }
 
     /**

@@ -213,9 +213,13 @@ export default function Kas({
     );
 }
 
-/** Per-pocket balance table (collapsible): opening, in/out, closing per wallet. */
+/**
+ * Per-pocket balance table: opening, in/out, closing per wallet. Open by
+ * default so a cashier can reconcile the drawer at shift change without an
+ * extra click; still collapsible for a shorter page.
+ */
 function WalletBreakdown({ wallets }: { wallets: WalletSummary[] }) {
-    const [open, setOpen] = useState(false);
+    const [open, setOpen] = useState(true);
     const sum = (pick: (w: WalletSummary) => number | null) =>
         wallets.reduce((total, w) => total + (pick(w) ?? 0), 0);
     const totalAkhir = sum((w) => w.kasAkhir);

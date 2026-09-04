@@ -1,8 +1,11 @@
 <?php
 
+use App\Models\ActivityLog;
 use App\Models\Piutang;
 use App\Models\Store;
 use App\Models\User;
+use App\Services\Fonnte;
+use Illuminate\Support\Facades\Http;
 use Inertia\Testing\AssertableInertia as Assert;
 
 function piutangStore(): Store
@@ -242,4 +245,83 @@ test('only management can delete a payment', function () {
     $this->actingAs(User::factory()->owner()->create())
         ->delete("/piutang/{$p->id}/bayar/{$payment->id}")->assertRedirect();
     expect($p->fresh()->payments()->count())->toBe(0);
+});
+
+test('the piutang list carries the next unpaid termin so a reminder can be sent', function () {
+    $store = piutangStore();
+    // Termin 1 fell due a month ago and is settled; termin 2 falls due today.
+    $p = makePiutang($store, ['date' => now()->subMonths(2)->toDateString(), 'price' => 900_000]);
+    $p->generateTermins(3, $p->date);
+    $p->payments()->create(['amount' => 300_000, 'paid_at' => now()->toDateString()]);
+
+    $this->actingAs(User::factory()->petugas()->create(['store_id' => $store->id]))
+        ->get('/piutang')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('piutang/index')
+            ->where('piutangs.0.nextDue.seq', 2)
+            ->where('piutangs.0.nextDue.amount', 300_000)
+            ->where('piutangs.0.late', false),
+        );
+});
+
+test('an overdue termin marks the piutang as late', function () {
+    $store = piutangStore();
+    $p = makePiutang($store, ['date' => now()->subMonths(3)->toDateString(), 'price' => 900_000]);
+    $p->generateTermins(3, $p->date);
+
+    $this->actingAs(User::factory()->petugas()->create(['store_id' => $store->id]))
+        ->get('/piutang')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('piutangs.0.late', true)
+            ->where('piutangs.0.nextDue.seq', 1),
+        );
+});
+
+test('a WhatsApp instalment reminder is sent to the debtor', function () {
+    $this->app->instance(Fonnte::class, new Fonnte('test-token'));
+
+    $store = piutangStore();
+    $p = makePiutang($store, ['debtor_phone' => '081253721672']);
+
+    $this->actingAs(User::factory()->petugas()->create(['store_id' => $store->id]))
+        ->post("/piutang/{$p->id}/ingatkan", ['message' => 'Halo Rina, cicilan Anda jatuh tempo.'])
+        ->assertRedirect()
+        ->assertSessionHas('success');
+
+    Http::assertSent(fn ($request) => str_contains($request->url(), 'api.fonnte.com')
+        && $request['target'] === '081253721672'
+        && str_contains($request['message'], 'cicilan Anda'));
+
+    expect(ActivityLog::where('subject_code', $p->code)
+        ->where('description', 'Mengirim pengingat WhatsApp')
+        ->exists())->toBeTrue();
+});
+
+test('a reminder is refused when the debtor has no WhatsApp number', function () {
+    $this->app->instance(Fonnte::class, new Fonnte('test-token'));
+
+    $store = piutangStore();
+    $p = makePiutang($store);
+
+    $this->actingAs(User::factory()->petugas()->create(['store_id' => $store->id]))
+        ->post("/piutang/{$p->id}/ingatkan", ['message' => 'Halo Rina.'])
+        ->assertRedirect()
+        ->assertSessionHas('error');
+
+    Http::assertNothingSent();
+});
+
+test('a debtor phone number is saved with the piutang', function () {
+    $store = piutangStore();
+
+    $this->actingAs(User::factory()->petugas()->create(['store_id' => $store->id]))
+        ->post('/piutang', [
+            'debtor_name' => 'Rina',
+            'debtor_phone' => '081253721672',
+            'device_name' => 'Redmi 13C',
+            'price' => 1_800_000,
+            'date' => '2026-07-25',
+        ])->assertRedirect();
+
+    expect(Piutang::first()->debtor_phone)->toBe('081253721672');
 });

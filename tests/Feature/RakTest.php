@@ -147,3 +147,69 @@ test('petugas cannot manage racks', function () {
     $this->actingAs($staff)->put("/rak/{$rak->id}", ['name' => 'Y'])->assertForbidden();
     $this->actingAs($staff)->delete("/rak/{$rak->id}")->assertForbidden();
 });
+
+test('racks are listed in natural order, not text order', function () {
+    $store = rakStore();
+
+    foreach (['Rak 1', 'Rak 10', 'Rak 2', 'Rak 11'] as $name) {
+        Rak::create(['store_id' => $store->id, 'name' => $name, 'active' => true]);
+    }
+
+    $owner = User::factory()->owner()->create();
+
+    $this->actingAs($owner)->withSession(['active_store_id' => $store->id])
+        ->get('/rak')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('rak/index')
+            ->where('racks.0.name', 'Rak 1')
+            ->where('racks.1.name', 'Rak 2')
+            ->where('racks.2.name', 'Rak 10')
+            ->where('racks.3.name', 'Rak 11'),
+        );
+});
+
+test('the gadai form suggests the emptiest rack that still has room', function () {
+    $store = rakStore();
+    $customer = rakCustomer();
+
+    $racks = [
+        'Rak 1' => ['capacity' => 10, 'held' => 5],
+        'Rak 2' => ['capacity' => 10, 'held' => 2],
+        // Lowest count of all, but already full, so it must not be suggested.
+        'Rak 3' => ['capacity' => 1, 'held' => 1],
+    ];
+
+    $n = 0;
+    foreach ($racks as $name => $spec) {
+        $rak = Rak::create([
+            'store_id' => $store->id, 'name' => $name,
+            'capacity' => $spec['capacity'], 'active' => true,
+        ]);
+
+        for ($i = 0; $i < $spec['held']; $i++) {
+            $n++;
+            $customer->transactions()->create([
+                'store_id' => $store->id, 'rak_id' => $rak->id, 'code' => 'GCG-REC-'.$n,
+                'device_owner' => 'Budi', 'device_name' => 'HP', 'kelengkapan' => 'HP saja',
+                'principal' => 1_000_000, 'tenor_days' => 15, 'fee_percent' => 10, 'fee' => 100_000,
+                'start_date' => '2026-07-20', 'due_date' => '2026-08-04', 'status' => 'AKTIF',
+                'approval_status' => 'approved', 'clerk' => 'Rina',
+            ]);
+        }
+    }
+
+    $this->actingAs(User::factory()->owner()->create())
+        ->withSession(['active_store_id' => $store->id])
+        ->get('/gadai/baru')
+        ->assertInertia(fn (Assert $page) => $page
+            ->has('rakList', 3)
+            ->where('rakList.0.name', 'Rak 1')
+            ->where('rakList.0.count', 5)
+            ->where('rakList.0.recommended', false)
+            ->where('rakList.1.name', 'Rak 2')
+            ->where('rakList.1.count', 2)
+            ->where('rakList.1.recommended', true)
+            ->where('rakList.2.name', 'Rak 3')
+            ->where('rakList.2.recommended', false),
+        );
+});

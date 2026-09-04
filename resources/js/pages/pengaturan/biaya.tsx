@@ -20,13 +20,19 @@ type Rule = { id: number; days: number; percent: number };
 
 export default function PengaturanBiaya({
     approvalThreshold,
+    maxDiscountPercent,
 }: {
     approvalThreshold: number;
+    maxDiscountPercent: number;
 }) {
     const approval = useForm({ approval_threshold: approvalThreshold });
+    const discount = useForm({ max_discount_percent: maxDiscountPercent });
 
     const saveApproval = () =>
         approval.put('/pengaturan/biaya', { preserveScroll: true });
+
+    const saveDiscount = () =>
+        discount.put('/pengaturan/biaya', { preserveScroll: true });
 
     const [rules, setRules] = useState<Rule[]>([
         { id: 1, days: 15, percent: 10 },
@@ -138,6 +144,7 @@ export default function PengaturanBiaya({
                                 Simpan Ambang
                             </Button>
                         </div>
+
                         <p className="mt-3 text-xs text-muted-foreground">
                             Saat ini pinjaman di atas{' '}
                             <span className="font-medium text-foreground">
@@ -145,6 +152,71 @@ export default function PengaturanBiaya({
                             </span>{' '}
                             memerlukan persetujuan Pemilik.
                         </p>
+                        <div className="mt-6 border-t pt-5">
+                            <h3 className="font-medium">
+                                Batas Diskon Biaya Petugas
+                            </h3>
+                            <p className="mt-1 mb-4 text-xs text-muted-foreground">
+                                Kalau petugas memotong biaya titipan lebih dari
+                                persentase ini, transaksinya ditandai dan muncul
+                                di panel "Perlu Diperiksa" pada Dashboard.
+                                Petugas tetap bisa menyimpannya. Isi 0 untuk
+                                mematikan penandaan. Pemilik dan admin tidak
+                                terkena batas ini.
+                            </p>
+                            <div className="flex flex-col gap-3 sm:flex-row sm:items-end">
+                                <div className="grid gap-1.5 sm:max-w-xs sm:flex-1">
+                                    <Label htmlFor="diskon">
+                                        Batas potongan
+                                    </Label>
+                                    <div className="relative">
+                                        <Input
+                                            id="diskon"
+                                            inputMode="numeric"
+                                            value={
+                                                discount.data
+                                                    .max_discount_percent || ''
+                                            }
+                                            onChange={(e) =>
+                                                discount.setData(
+                                                    'max_discount_percent',
+                                                    Math.min(
+                                                        100,
+                                                        parseInt(
+                                                            e.target.value.replace(
+                                                                /\D/g,
+                                                                '',
+                                                            ),
+                                                            10,
+                                                        ) || 0,
+                                                    ),
+                                                )
+                                            }
+                                            placeholder="0"
+                                            className="pr-8 tabular-nums"
+                                        />
+                                        <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">
+                                            %
+                                        </span>
+                                    </div>
+                                    {discount.errors.max_discount_percent && (
+                                        <p className="text-xs text-destructive">
+                                            {
+                                                discount.errors
+                                                    .max_discount_percent
+                                            }
+                                        </p>
+                                    )}
+                                </div>
+                                <Button
+                                    onClick={saveDiscount}
+                                    disabled={discount.processing}
+                                >
+                                    <Save />
+                                    Simpan Batas
+                                </Button>
+                            </div>
+                        </div>
                     </section>
 
                     {/* Fee rules */}

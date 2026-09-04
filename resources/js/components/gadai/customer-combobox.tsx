@@ -13,6 +13,7 @@ import {
     PopoverContent,
     PopoverTrigger,
 } from '@/components/ui/popover';
+import { formatPhone } from '@/lib/format';
 import { initials } from '@/lib/utils';
 import type { Customer } from '@/types/gadai';
 
@@ -34,7 +35,9 @@ export function CustomerCombobox({
         const q = query.trim().toLowerCase();
         const list = q
             ? customers.filter((c) =>
-                  `${c.name} ${c.phone} ${c.id}`.toLowerCase().includes(q),
+                  `${c.name} ${c.phone} ${formatPhone(c.phone)} ${c.id}`
+                      .toLowerCase()
+                      .includes(q),
               )
             : customers;
 
@@ -55,7 +58,7 @@ export function CustomerCombobox({
                             {value.name}
                             <span className="text-muted-foreground">
                                 {' '}
-                                · {value.phone}
+                                · {formatPhone(value.phone)}
                             </span>
                         </span>
                     ) : (
@@ -105,7 +108,7 @@ export function CustomerCombobox({
                                             )}
                                         </span>
                                         <span className="block truncate text-xs text-muted-foreground tabular-nums">
-                                            {c.phone} · {c.id}
+                                            {formatPhone(c.phone)} · {c.id}
                                         </span>
                                     </span>
                                     {value?.id === c.id && (

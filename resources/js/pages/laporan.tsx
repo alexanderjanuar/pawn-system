@@ -38,7 +38,15 @@ import { cn, initials } from '@/lib/utils';
 import type { Transaction } from '@/types/gadai';
 
 type Period = { from: string; to: string };
-type TrendPoint = { label: string; value: number; current: boolean };
+type TrendPoint = {
+    label: string;
+    title?: string;
+    value: number;
+    current: boolean;
+    /** Month boundaries, present on the monthly trend so a bar can be clicked. */
+    from?: string;
+    to?: string;
+};
 type FeeIncomeEntry = {
     id: number;
     code: string | null;
@@ -101,7 +109,15 @@ function BlockHead({
 }
 
 /** One metric card. `highlight` makes it the visual anchor of its group. */
-function StatCard({ label, value, hint, icon: Icon, tone, highlight, info }: CardData) {
+function StatCard({
+    label,
+    value,
+    hint,
+    icon: Icon,
+    tone,
+    highlight,
+    info,
+}: CardData) {
     return (
         <div
             className={cn(
@@ -223,6 +239,22 @@ export default function Laporan({
             ? `${period.from ? formatDate(period.from) : '—'} – ${period.to ? formatDate(period.to) : '—'}`
             : 'Semua tanggal';
 
+    const applyPeriod = (from: string, to: string) =>
+        router.get(
+            '/laporan',
+            { from, to },
+            { preserveScroll: true, replace: true },
+        );
+
+    // Highlight the bar that matches the period being viewed, so the chart and
+    // the figure beside it always tell the same story.
+    const monthlyTrend = trend.map((point) => ({
+        ...point,
+        current: point.from === period.from && point.to === period.to,
+    }));
+
+    const selectedMonth = monthlyTrend.findIndex((point) => point.current);
+
     return (
         <>
             <Head title="Laporan" />
@@ -261,13 +293,7 @@ export default function Laporan({
                         from={period.from}
                         to={period.to}
                         idPrefix="lap"
-                        onChange={(from, to) =>
-                            router.get(
-                                '/laporan',
-                                { from, to },
-                                { preserveScroll: true, replace: true },
-                            )
-                        }
+                        onChange={applyPeriod}
                     />
                     <p className="text-sm text-muted-foreground sm:text-right">
                         <span className="font-medium text-foreground tabular-nums">
@@ -315,24 +341,66 @@ export default function Laporan({
                                     <IncomeInfo />
                                 </h2>
                                 <p className="text-xs text-muted-foreground">
-                                    Biaya titipan · 6 bulan terakhir
+                                    Biaya titipan · klik batang bulan untuk
+                                    melihat rinciannya
                                 </p>
                             </div>
-                            <div className="text-right">
+                            <div className="shrink-0 text-right">
                                 <p className="text-lg font-semibold text-primary tabular-nums">
                                     {formatRupiah(feeIncome.total)}
                                 </p>
-                                <p className="text-xs text-muted-foreground">
-                                    periode ini · Perpanjang{' '}
+                                <p className="text-xs whitespace-nowrap text-muted-foreground">
+                                    {periodLabel}
+                                </p>
+                                <p className="text-xs whitespace-nowrap text-muted-foreground">
+                                    Perpanjang{' '}
                                     {formatRupiah(feeIncome.perpanjang)} · Tebus{' '}
                                     {formatRupiah(feeIncome.tebus)}
                                 </p>
                             </div>
                         </div>
 
+                        {/* Month navigation, so the figure above is never from
+                            a month the user did not mean to be looking at. */}
+                        <div className="mt-4 flex flex-wrap items-center gap-1.5">
+                            {monthlyTrend.map((point, i) => (
+                                <button
+                                    key={point.from ?? i}
+                                    type="button"
+                                    onClick={() =>
+                                        point.from &&
+                                        point.to &&
+                                        applyPeriod(point.from, point.to)
+                                    }
+                                    className={cn(
+                                        'rounded-lg border px-2.5 py-1 text-xs font-medium transition-colors',
+                                        point.current
+                                            ? 'border-transparent bg-primary text-primary-foreground'
+                                            : 'border-border text-muted-foreground hover:bg-accent hover:text-foreground',
+                                    )}
+                                >
+                                    {point.title ?? point.label}
+                                </button>
+                            ))}
+                            {selectedMonth === -1 && (
+                                <span className="px-1 text-xs text-muted-foreground">
+                                    periode custom
+                                </span>
+                            )}
+                        </div>
+
                         {/* trend */}
-                        <div className="mt-6">
-                            <BarChart data={trend} />
+                        <div className="mt-4">
+                            <BarChart
+                                data={monthlyTrend}
+                                onSelect={(i) => {
+                                    const point = monthlyTrend[i];
+
+                                    if (point.from && point.to) {
+                                        applyPeriod(point.from, point.to);
+                                    }
+                                }}
+                            />
                         </div>
                     </section>
 
@@ -359,8 +427,8 @@ export default function Laporan({
                                 <IncomeInfo />
                             </h2>
                             <p className="text-xs text-muted-foreground">
-                                Bunga yang dibayar · Tebus dihitung bunganya saja
-                                (tanpa pokok). Beda dengan Kas Harian yang
+                                Bunga yang dibayar · Tebus dihitung bunganya
+                                saja (tanpa pokok). Beda dengan Kas Harian yang
                                 menghitung uang fisik.
                             </p>
                         </div>
@@ -434,8 +502,7 @@ export default function Laporan({
                                                             meta.ring,
                                                         )}
                                                     >
-                                                        {e.kind ===
-                                                        'perpanjang'
+                                                        {e.kind === 'perpanjang'
                                                             ? 'Perpanjang'
                                                             : 'Tebus'}
                                                     </span>
@@ -758,25 +825,27 @@ function ClerkDetailDialog({
 
                 {txs.length > 0 && (
                     <div className="flex flex-wrap gap-1.5">
-                        {STATUS_ORDER.filter((st) => counts[st] > 0).map((st) => (
-                            <span
-                                key={st}
-                                className={cn(
-                                    'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset',
-                                    STATUS_META[st].badge,
-                                    STATUS_META[st].ring,
-                                )}
-                            >
+                        {STATUS_ORDER.filter((st) => counts[st] > 0).map(
+                            (st) => (
                                 <span
+                                    key={st}
                                     className={cn(
-                                        'size-1.5 rounded-full',
-                                        STATUS_META[st].dot,
+                                        'inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium ring-1 ring-inset',
+                                        STATUS_META[st].badge,
+                                        STATUS_META[st].ring,
                                     )}
-                                    aria-hidden
-                                />
-                                {STATUS_META[st].label} · {counts[st]}
-                            </span>
-                        ))}
+                                >
+                                    <span
+                                        className={cn(
+                                            'size-1.5 rounded-full',
+                                            STATUS_META[st].dot,
+                                        )}
+                                        aria-hidden
+                                    />
+                                    {STATUS_META[st].label} · {counts[st]}
+                                </span>
+                            ),
+                        )}
                     </div>
                 )}
 
@@ -785,11 +854,15 @@ function ClerkDetailDialog({
                         <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
                             <tr className="text-left text-xs tracking-wide text-muted-foreground uppercase">
                                 <th className="px-3 py-2 font-medium">Kode</th>
-                                <th className="px-3 py-2 font-medium">Tanggal</th>
+                                <th className="px-3 py-2 font-medium">
+                                    Tanggal
+                                </th>
                                 <th className="px-3 py-2 font-medium">
                                     Pelanggan
                                 </th>
-                                <th className="px-3 py-2 font-medium">Status</th>
+                                <th className="px-3 py-2 font-medium">
+                                    Status
+                                </th>
                                 <th className="px-3 py-2 text-right font-medium">
                                     Dana
                                 </th>

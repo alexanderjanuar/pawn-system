@@ -94,9 +94,11 @@ Route::middleware(['auth', 'active-store'])->group(function () {
     Route::get('rak', [RakController::class, 'index'])->name('rak.index');
     // Pindah HP antar rak: operasional, boleh oleh semua peran
     Route::put('rak/pindah/{transaction}', [RakController::class, 'moveItem'])->name('rak.move');
+    Route::get('rak/{rak}/label', [RakController::class, 'label'])->name('rak.label');
     Route::middleware('role:owner,admin')->group(function () {
         Route::post('rak', [RakController::class, 'store'])->name('rak.store');
         Route::put('rak/{rak}', [RakController::class, 'update'])->name('rak.update');
+        Route::put('rak/{rak}/pindah-semua', [RakController::class, 'moveAll'])->name('rak.move-all');
         Route::delete('rak/{rak}', [RakController::class, 'destroy'])->name('rak.destroy');
     });
 
@@ -107,6 +109,7 @@ Route::middleware(['auth', 'active-store'])->group(function () {
     Route::put('piutang/{piutang}', [PiutangController::class, 'update'])->name('piutang.update');
     Route::put('piutang/{piutang}/termin', [PiutangController::class, 'setTermin'])->name('piutang.termin');
     Route::post('piutang/{piutang}/bayar', [PiutangController::class, 'storePayment'])->name('piutang.bayar');
+    Route::post('piutang/{piutang}/ingatkan', [PiutangController::class, 'remind'])->name('piutang.remind');
     Route::middleware('role:owner,admin')->group(function () {
         Route::delete('piutang/{piutang}', [PiutangController::class, 'destroy'])->name('piutang.destroy');
         Route::delete('piutang/{piutang}/bayar/{payment}', [PiutangController::class, 'destroyPayment'])->name('piutang.bayar.destroy');
@@ -115,6 +118,8 @@ Route::middleware(['auth', 'active-store'])->group(function () {
     // Laporan & audit (hanya owner & admin — petugas tidak melihat data laporan/keuangan/aktivitas)
     Route::middleware('role:owner,admin')->group(function () {
         Route::get('aktivitas', [AktivitasController::class, 'index'])->name('aktivitas');
+        Route::post('aktivitas/tinjau-semua', [AktivitasController::class, 'reviewAll'])->name('aktivitas.review-all');
+        Route::post('aktivitas/{activityLog}/tinjau', [AktivitasController::class, 'review'])->name('aktivitas.review');
         Route::get('laporan', [LaporanController::class, 'index'])->name('laporan');
         Route::get('laporan/lelang', [LaporanController::class, 'lelang'])->name('laporan.lelang');
         Route::get('laporan/export', [LaporanController::class, 'export'])->name('laporan.export');

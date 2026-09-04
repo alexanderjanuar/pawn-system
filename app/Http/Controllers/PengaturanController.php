@@ -10,6 +10,7 @@ use App\Models\Transaction;
 use App\Support\ActiveStore;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -23,18 +24,25 @@ class PengaturanController extends Controller
                 'approval_threshold',
                 Transaction::APPROVAL_THRESHOLD,
             ),
+            'maxDiscountPercent' => (int) Setting::get(
+                'max_discount_percent',
+                Transaction::MAX_DISCOUNT_PERCENT,
+            ),
         ]);
     }
 
     public function updateBiaya(Request $request): RedirectResponse
     {
         $data = $request->validate([
-            'approval_threshold' => ['required', 'integer', 'min:0'],
+            'approval_threshold' => ['sometimes', 'integer', 'min:0'],
+            'max_discount_percent' => ['sometimes', 'integer', 'min:0', 'max:100'],
         ]);
 
-        Setting::put('approval_threshold', $data['approval_threshold']);
+        foreach ($data as $key => $value) {
+            Setting::put($key, $value);
+        }
 
-        return back()->with('success', 'Ambang persetujuan pencairan disimpan.');
+        return back()->with('success', 'Pengaturan disimpan.');
     }
 
     public function petugas(): Response
@@ -213,7 +221,7 @@ class PengaturanController extends Controller
      * Disbursed loan principal per month over the last 6 months, for the
      * petugas detail chart. Mirrors the report trend format.
      *
-     * @param  \Illuminate\Support\Collection<int, Transaction>  $txs
+     * @param  Collection<int, Transaction>  $txs
      * @return array<int, array{label: string, value: int, current: bool}>
      */
     private function clerkMonthly($txs): array

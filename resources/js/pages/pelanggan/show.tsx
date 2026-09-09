@@ -276,11 +276,11 @@ export default function PelangganShow({
                                     </span>
                                 </Info>
                                 <Info icon={MapPin} label="Alamat">
-                                    {customer.address}
+                                    {customer.address || '—'}
                                 </Info>
                                 <Info icon={IdCard} label="No. KTP">
                                     <span className="tabular-nums">
-                                        {customer.idNumber}
+                                        {customer.idNumber || '—'}
                                     </span>
                                 </Info>
                                 <Info

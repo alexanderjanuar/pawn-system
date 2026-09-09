@@ -3,6 +3,7 @@ import { HandCoins, Plus, Search, SearchX, Send, Wallet } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DatePicker } from '@/components/gadai/date-picker';
 import { PageHeader } from '@/components/gadai/page-header';
+import { MissingFields } from '@/components/missing-fields';
 import { PiutangPaymentDialog } from '@/components/piutang-payment-dialog';
 import { PiutangReminderDialog } from '@/components/piutang-reminder-dialog';
 import { TablePagination } from '@/components/table-pagination';
@@ -94,11 +95,7 @@ export default function PiutangIndex({
                 return false;
             }
 
-            if (
-                filter !== 'all' &&
-                filter !== 'telat' &&
-                p.status !== filter
-            ) {
+            if (filter !== 'all' && filter !== 'telat' && p.status !== filter) {
                 return false;
             }
 
@@ -162,11 +159,18 @@ export default function PiutangIndex({
 
                 {/* Summary */}
                 <div className="grid grid-cols-1 divide-y rounded-xl border bg-card shadow-sm sm:grid-cols-3 sm:divide-x sm:divide-y-0">
-                    <Stat label="Piutang Berjalan" value={String(summary.berjalan)} />
+                    <Stat
+                        label="Piutang Berjalan"
+                        value={String(summary.berjalan)}
+                    />
                     <Stat
                         label="Sisa Piutang"
                         value={formatRupiah(summary.outstanding)}
-                        tone={summary.outstanding > 0 ? 'text-perpanjang' : undefined}
+                        tone={
+                            summary.outstanding > 0
+                                ? 'text-perpanjang'
+                                : undefined
+                        }
                     />
                     <Stat
                         label="Sudah Tertagih"
@@ -231,11 +235,15 @@ export default function PiutangIndex({
                         <table className="w-full min-w-[58rem] text-sm">
                             <thead>
                                 <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
-                                    <th className="px-5 py-3 font-medium">Kode</th>
+                                    <th className="px-5 py-3 font-medium">
+                                        Kode
+                                    </th>
                                     <th className="px-5 py-3 font-medium">
                                         Peminjam
                                     </th>
-                                    <th className="px-5 py-3 font-medium">HP</th>
+                                    <th className="px-5 py-3 font-medium">
+                                        HP
+                                    </th>
                                     <th className="px-5 py-3 text-right font-medium">
                                         Total
                                     </th>
@@ -254,7 +262,9 @@ export default function PiutangIndex({
                                 {pageItems.map((p) => (
                                     <tr
                                         key={p.id}
-                                        onClick={() => router.visit(p.detailUrl)}
+                                        onClick={() =>
+                                            router.visit(p.detailUrl)
+                                        }
                                         className="cursor-pointer transition-colors hover:bg-accent"
                                     >
                                         <td className="px-5 py-3">
@@ -408,6 +418,22 @@ function Stat({
     );
 }
 
+/** Marks a field the form cannot be saved without. */
+function Required() {
+    return (
+        <span className="text-destructive" title="Wajib diisi">
+            *
+        </span>
+    );
+}
+
+/** Marks a field that can safely be left empty. */
+function Optional() {
+    return (
+        <span className="font-normal text-muted-foreground">(opsional)</span>
+    );
+}
+
 function TambahPiutangDialog({ petugasList }: { petugasList: string[] }) {
     const [open, setOpen] = useState(false);
     const form = useForm({
@@ -420,6 +446,13 @@ function TambahPiutangDialog({ petugasList }: { petugasList: string[] }) {
         termin_count: 0,
         notes: '',
     });
+
+    // Named in form order so the clerk's eye lands on the first empty box.
+    const missing = [
+        !form.data.debtor_name.trim() && 'Peminjam',
+        !form.data.device_name.trim() && 'Nama HP',
+        form.data.price <= 0 && 'Total harga',
+    ].filter((label): label is string => typeof label === 'string');
 
     const financed = Math.max(0, form.data.price - form.data.down_payment);
     const perTermin =
@@ -470,7 +503,9 @@ function TambahPiutangDialog({ petugasList }: { petugasList: string[] }) {
                 <div className="grid gap-4">
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="grid gap-1.5">
-                            <Label htmlFor="peminjam">Peminjam</Label>
+                            <Label htmlFor="peminjam">
+                                Peminjam <Required />
+                            </Label>
                             <Input
                                 id="peminjam"
                                 list="piutang-petugas"
@@ -493,7 +528,9 @@ function TambahPiutangDialog({ petugasList }: { petugasList: string[] }) {
                             )}
                         </div>
                         <div className="grid gap-1.5">
-                            <Label htmlFor="peminjam-wa">No. WhatsApp</Label>
+                            <Label htmlFor="peminjam-wa">
+                                No. WhatsApp <Optional />
+                            </Label>
                             <Input
                                 id="peminjam-wa"
                                 inputMode="tel"
@@ -515,7 +552,9 @@ function TambahPiutangDialog({ petugasList }: { petugasList: string[] }) {
                         </div>
                     </div>
                     <div className="grid gap-1.5">
-                        <Label htmlFor="hp">Nama HP</Label>
+                        <Label htmlFor="hp">
+                            Nama HP <Required />
+                        </Label>
                         <Input
                             id="hp"
                             value={form.data.device_name}
@@ -532,7 +571,9 @@ function TambahPiutangDialog({ petugasList }: { petugasList: string[] }) {
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="grid gap-1.5">
-                            <Label htmlFor="harga">Total harga</Label>
+                            <Label htmlFor="harga">
+                                Total harga <Required />
+                            </Label>
                             <div className="relative">
                                 <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
                                     Rp
@@ -570,7 +611,9 @@ function TambahPiutangDialog({ petugasList }: { petugasList: string[] }) {
                             )}
                         </div>
                         <div className="grid gap-1.5">
-                            <Label htmlFor="dp">DP / uang muka</Label>
+                            <Label htmlFor="dp">
+                                DP / uang muka <Optional />
+                            </Label>
                             <div className="relative">
                                 <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
                                     Rp
@@ -610,7 +653,9 @@ function TambahPiutangDialog({ petugasList }: { petugasList: string[] }) {
                     </div>
                     <div className="grid gap-4 sm:grid-cols-2">
                         <div className="grid gap-1.5">
-                            <Label htmlFor="tgl">Tanggal ambil</Label>
+                            <Label htmlFor="tgl">
+                                Tanggal ambil <Required />
+                            </Label>
                             <DatePicker
                                 id="tgl"
                                 value={form.data.date}
@@ -647,30 +692,29 @@ function TambahPiutangDialog({ petugasList }: { petugasList: string[] }) {
                             : ' · bayar bebas tanpa jadwal termin'}
                     </p>
                     <div className="grid gap-1.5">
-                        <Label htmlFor="catatan">Catatan</Label>
+                        <Label htmlFor="catatan">
+                            Catatan <Optional />
+                        </Label>
                         <Textarea
                             id="catatan"
                             value={form.data.notes}
                             onChange={(e) =>
                                 form.setData('notes', e.target.value)
                             }
-                            placeholder="Keterangan tambahan (opsional)"
+                            placeholder="Keterangan tambahan"
                             rows={2}
                         />
                     </div>
                 </div>
+                <MissingFields fields={missing} />
+
                 <DialogFooter>
                     <DialogClose asChild>
                         <Button variant="outline">Batal</Button>
                     </DialogClose>
                     <Button
                         onClick={submit}
-                        disabled={
-                            form.processing ||
-                            !form.data.debtor_name.trim() ||
-                            !form.data.device_name.trim() ||
-                            form.data.price <= 0
-                        }
+                        disabled={form.processing || missing.length > 0}
                     >
                         <Plus />
                         Simpan

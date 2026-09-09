@@ -740,7 +740,7 @@ export default function TransaksiShow({
                                 <Spec label="Nama" value={tx.customer.name} />
                                 <Spec
                                     label="No. KTP"
-                                    value={tx.customer.idNumber}
+                                    value={tx.customer.idNumber || '—'}
                                     mono
                                 />
                                 <div className="flex items-start gap-2 text-sm">

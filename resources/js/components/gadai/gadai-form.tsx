@@ -32,6 +32,7 @@ import {
     WalletSourceField,
 } from '@/components/gadai/wallet-source-field';
 import type { SplitRow } from '@/components/gadai/wallet-source-field';
+import { MissingFields } from '@/components/missing-fields';
 import { StatusBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
@@ -243,8 +244,9 @@ export function GadaiForm({
             customers.find(
                 (c) =>
                     c.blacklisted &&
-                    ((nik.length >= 6 && c.idNumber.trim() === nik) ||
-                        (hp.length >= 6 && c.phone.replace(/\D/g, '') === hp)),
+                    ((nik.length >= 6 && (c.idNumber ?? '').trim() === nik) ||
+                        (hp.length >= 6 &&
+                            (c.phone ?? '').replace(/\D/g, '') === hp)),
             ) ?? null
         );
     }, [
@@ -374,11 +376,30 @@ export function GadaiForm({
 
     // Split funding (if used) must add up to the principal.
     const fundingValid = isFundingValid(data.wallet_split, data.principal);
-    const createDisabled =
-        processing ||
-        data.principal <= 0 ||
-        !data.clerk.trim() ||
-        !fundingValid;
+
+    // Everything the save would refuse, named in the order the fields appear so
+    // the clerk knows which box to go back to instead of hunting for it.
+    const missing = [
+        data.customer_mode === 'existing' && !data.customer_code && 'Pelanggan',
+        data.customer_mode === 'new' && !data.name.trim() && 'Nama pelanggan',
+        data.customer_mode === 'new' && !data.phone.trim() && 'Nomor HP',
+        !data.device_name.trim() && nameLabel,
+        !data.kelengkapan.trim() && 'Kelengkapan',
+        data.device_lock_type !== 'none' &&
+            !data.device_lock_value.trim() &&
+            'PIN / pola HP',
+        data.principal <= 0 && 'Dana titipan',
+        data.tenor_choice === 'custom' &&
+            data.custom_days < 1 &&
+            'Jangka waktu',
+        !data.clerk.trim() && 'Petugas',
+    ].filter((label): label is string => typeof label === 'string');
+
+    const fundingNote = fundingValid
+        ? null
+        : 'Pembagian dompet belum pas dengan dana titipan. Perbaiki di kotak "Dompet sumber dana".';
+
+    const createDisabled = processing || missing.length > 0 || !fundingValid;
     const fundingSplit = normalizeFunding(data.wallet_split, data.principal);
     const fundingLabel = fundingSplit
         ? fundingSplit
@@ -456,7 +477,7 @@ export function GadaiForm({
                     description={
                         isEdit
                             ? 'Perbarui data transaksi gadai.'
-                            : 'Catat barang masuk. Biaya titipan dihitung otomatis oleh sistem.'
+                            : 'Catat barang masuk. Biaya titipan dihitung otomatis. Kolom bertanda * wajib diisi.'
                     }
                 >
                     <Button variant="outline" asChild type="button">
@@ -624,6 +645,7 @@ export function GadaiForm({
                                     ) : (
                                         <Field
                                             label="Cari pelanggan"
+                                            required
                                             hint={errors.customer_code}
                                         >
                                             <CustomerCombobox
@@ -648,6 +670,7 @@ export function GadaiForm({
                                     <div className="grid gap-4 sm:grid-cols-2">
                                         <Field
                                             label="Nama pelanggan"
+                                            required
                                             htmlFor="nama"
                                             className="sm:col-span-2"
                                             hint={errors.name}
@@ -666,6 +689,7 @@ export function GadaiForm({
                                         </Field>
                                         <Field
                                             label="Nomor HP"
+                                            required
                                             htmlFor="hp"
                                             hint={errors.phone}
                                         >
@@ -786,6 +810,7 @@ export function GadaiForm({
 
                                 <Field
                                     label={nameLabel}
+                                    required
                                     htmlFor="device"
                                     className="sm:col-span-2"
                                     hint={errors.device_name}
@@ -992,6 +1017,7 @@ export function GadaiForm({
 
                                 <Field
                                     label="Kelengkapan"
+                                    required
                                     htmlFor="kelengkapan"
                                     className="sm:col-span-2"
                                     hint={errors.kelengkapan}
@@ -1258,6 +1284,7 @@ export function GadaiForm({
 
                                 <Field
                                     label="Dana titipan"
+                                    required
                                     htmlFor="dana"
                                     className="sm:col-span-2"
                                     hint={errors.principal}
@@ -1289,6 +1316,7 @@ export function GadaiForm({
 
                                 <Field
                                     label="Jangka waktu"
+                                    required
                                     className="sm:col-span-2"
                                 >
                                     <ToggleGroup
@@ -1474,6 +1502,7 @@ export function GadaiForm({
                                 </Field>
                                 <Field
                                     label="Petugas"
+                                    required
                                     htmlFor="petugas"
                                     hint={
                                         errors.clerk ??
@@ -1729,14 +1758,24 @@ export function GadaiForm({
                                 </div>
                             )}
 
+                            <MissingFields
+                                fields={missing}
+                                note={
+                                    isEdit
+                                        ? reasonMissing
+                                            ? 'Nominal berubah, jadi alasan perubahan wajib diisi.'
+                                            : null
+                                        : fundingNote
+                                }
+                            />
+
                             <div className="flex flex-col gap-2">
                                 {isEdit ? (
                                     <Button
                                         type="submit"
                                         disabled={
                                             processing ||
-                                            data.principal <= 0 ||
-                                            !data.clerk.trim() ||
+                                            missing.length > 0 ||
                                             reasonMissing
                                         }
                                     >
@@ -1996,16 +2035,27 @@ function Field({
     children,
     hint,
     className,
+    required = false,
 }: {
     label: string;
     htmlFor?: string;
     children: ReactNode;
     hint?: string;
     className?: string;
+    /** Marks the field as one the form cannot be saved without. */
+    required?: boolean;
 }) {
     return (
         <div className={cn('grid gap-1.5', className)}>
-            <Label htmlFor={htmlFor}>{label}</Label>
+            <Label htmlFor={htmlFor}>
+                {label}
+                {required && (
+                    <span className="text-destructive" title="Wajib diisi">
+                        {' '}
+                        *
+                    </span>
+                )}
+            </Label>
             {children}
             {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
         </div>
@@ -2067,9 +2117,11 @@ function SelectedCustomerCard({
                         {formatPhone(customer.phone)}
                     </span>
                     <span className="tabular-nums">
-                        KTP: {customer.idNumber}
+                        KTP: {customer.idNumber || '—'}
                     </span>
-                    <span className="sm:col-span-2">{customer.address}</span>
+                    <span className="sm:col-span-2">
+                        {customer.address || '—'}
+                    </span>
                 </div>
             </div>
             <Button type="button" variant="ghost" size="sm" onClick={onChange}>

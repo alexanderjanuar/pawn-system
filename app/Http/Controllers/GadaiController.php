@@ -173,7 +173,7 @@ class GadaiController extends Controller
             $result = $this->deliverNota($transaction, null, $clerk);
             $message .= $result['sent']
                 ? ' Nota terkirim ke WhatsApp pelanggan.'
-                : ' Namun nota gagal dikirim ke WhatsApp.';
+                : ' Namun nota gagal dikirim: '.($result['error'] ?? 'periksa pengaturan WhatsApp').'.';
         }
 
         return redirect($target)->with('success', $message);
@@ -633,8 +633,11 @@ class GadaiController extends Controller
             return back()->with('error', 'Pelanggan belum memiliki nomor WhatsApp.');
         }
 
-        if (! app(Fonnte::class)->send($phone, $data['message'])) {
-            return back()->with('error', 'Pengingat gagal dikirim. Periksa koneksi atau pengaturan WhatsApp.');
+        $fonnte = app(Fonnte::class);
+
+        if (! $fonnte->send($phone, $data['message'])) {
+            return back()->with('error', $fonnte->lastError()
+                ?? 'Pengingat gagal dikirim. Periksa koneksi atau pengaturan WhatsApp.');
         }
 
         $transaction->events()->create([
@@ -676,7 +679,8 @@ class GadaiController extends Controller
         $result = $this->deliverNota($transaction, $data['message'] ?? null, $request->user()?->name);
 
         if (! $result['sent']) {
-            return back()->with('error', 'Nota gagal dikirim. Periksa koneksi atau pengaturan WhatsApp.');
+            return back()->with('error', $result['error']
+                ?? 'Nota gagal dikirim. Periksa koneksi atau pengaturan WhatsApp.');
         }
 
         return back()->with('success', "Link nota terkirim ke {$transaction->customer->name}.");
@@ -686,7 +690,7 @@ class GadaiController extends Controller
      * Send the customer a short public link to their nota over WhatsApp and
      * record an event on success. The link opens the nota PDF in the browser.
      *
-     * @return array{sent: bool}
+     * @return array{sent: bool, error: string|null}
      */
     private function deliverNota(Transaction $transaction, ?string $message, ?string $by): array
     {
@@ -696,7 +700,8 @@ class GadaiController extends Controller
             ? rtrim($message)."\n\nNota: {$link}"
             : $this->buildNotaMessage($transaction, $link);
 
-        $sent = app(Fonnte::class)->send($transaction->customer->phone, $text);
+        $fonnte = app(Fonnte::class);
+        $sent = $fonnte->send($transaction->customer->phone, $text);
 
         if ($sent) {
             $transaction->events()->create([
@@ -715,7 +720,7 @@ class GadaiController extends Controller
             );
         }
 
-        return ['sent' => $sent];
+        return ['sent' => $sent, 'error' => $sent ? null : $fonnte->lastError()];
     }
 
     /** Default WhatsApp message body when handing a nota to the customer. */

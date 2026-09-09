@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AktivitasController;
 use App\Http\Controllers\CekStatusController;
+use App\Http\Controllers\ClientErrorController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\GadaiController;
 use App\Http\Controllers\JatuhTempoController;
@@ -68,6 +69,11 @@ Route::middleware(['auth', 'active-store'])->group(function () {
 
     // Pengingat WhatsApp ke pelanggan
     Route::post('transaksi/{transaction}/ingatkan', [GadaiController::class, 'remind'])->name('transaksi.remind');
+
+    // Crash reports from the clerk's browser, so a blank page leaves a trace.
+    Route::post('client-error', [ClientErrorController::class, 'store'])
+        ->middleware('throttle:10,1')
+        ->name('client-error');
     Route::post('transaksi/{transaction}/kirim-nota', [GadaiController::class, 'sendNota'])->name('transaksi.kirim-nota');
 
     // Tidak diambil (wanprestasi) + Lelang

@@ -13,8 +13,9 @@ export type Kelengkapan = string;
 export type CustomerContact = {
     name: string;
     phone: string;
-    address: string;
-    idNumber: string; // No. KTP
+    /** Both are optional on the form, so the column is nullable. */
+    address: string | null;
+    idNumber: string | null; // No. KTP
 };
 
 /** Compact pawn-history row shown for an existing customer on the form. */

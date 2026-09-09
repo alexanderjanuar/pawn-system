@@ -2,6 +2,7 @@
 
 use App\Models\ActivityLog;
 use App\Models\Customer;
+use App\Models\Store;
 use App\Models\Transaction;
 use App\Models\User;
 use Illuminate\Http\UploadedFile;
@@ -599,4 +600,27 @@ test('a gadai requires a device name and principal', function () {
     ])->assertSessionHasErrors(['device_name', 'principal']);
 
     expect(Transaction::count())->toBe(0);
+});
+
+test('the gadai form carries customers whose KTP number and address are empty', function () {
+    // Both columns are optional, so the form must cope with null. A blacklisted
+    // customer without a KTP used to crash the form's blacklist check the
+    // moment a clerk typed the sixth digit of a KTP number.
+    $store = Store::create(['code' => 'TK-001', 'nota_prefix' => 'GCG', 'name' => 'Toko A', 'active' => true]);
+
+    Customer::create([
+        'code' => 'PLG-900', 'name' => 'Tanpa KTP', 'phone' => '081200000000',
+        'id_number' => null, 'address' => null, 'join_date' => '2026-07-01',
+        'blacklisted_at' => now(), 'blacklist_reason' => 'Menunggak',
+    ]);
+
+    $this->actingAs(User::factory()->owner()->create())
+        ->withSession(['active_store_id' => $store->id])
+        ->get('/gadai/baru')
+        ->assertInertia(fn (Assert $page) => $page
+            ->component('transaksi/create')
+            ->where('customers.0.idNumber', null)
+            ->where('customers.0.address', null)
+            ->where('customers.0.blacklisted', true),
+        );
 });

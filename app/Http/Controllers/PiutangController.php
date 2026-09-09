@@ -239,8 +239,11 @@ class PiutangController extends Controller
             return back()->with('error', 'Peminjam belum memiliki nomor WhatsApp.');
         }
 
-        if (! app(Fonnte::class)->send($piutang->debtor_phone, $data['message'])) {
-            return back()->with('error', 'Pengingat gagal dikirim. Periksa koneksi atau pengaturan WhatsApp.');
+        $fonnte = app(Fonnte::class);
+
+        if (! $fonnte->send($piutang->debtor_phone, $data['message'])) {
+            return back()->with('error', $fonnte->lastError()
+                ?? 'Pengingat gagal dikirim. Periksa koneksi atau pengaturan WhatsApp.');
         }
 
         ActivityLog::record(

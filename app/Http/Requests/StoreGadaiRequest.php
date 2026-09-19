@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests;
 
+use App\Support\LateFee;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -52,6 +53,9 @@ class StoreGadaiRequest extends FormRequest
             'kelengkapan' => ['required', 'string', 'max:120'],
 
             'clerk' => ['nullable', 'string', 'max:120'],
+            // Optional late-fee rule just for this item; null follows the shop.
+            'denda_mode' => ['nullable', 'in:'.implode(',', LateFee::MODES)],
+            'denda_value' => ['nullable', 'numeric', 'min:0', 'max:100000000'],
             'rak_id' => ['nullable', 'integer', 'exists:raks,id'],
             'wallet_id' => ['nullable', 'integer', 'exists:wallets,id'],
             'wallet_split' => ['nullable', 'array', 'min:1'],

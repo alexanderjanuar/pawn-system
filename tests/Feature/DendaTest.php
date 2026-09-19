@@ -181,3 +181,99 @@ test('an auction sale can be back-dated into the right day of cash', function ()
         ->and($event->event_date->toDateString())->toBe($when)
         ->and((int) $event->amount)->toBe(1_200_000);
 });
+
+test('an item can carry its own late-fee rule, overriding the shop', function () {
+    dendaRule('nominal', 5_000);
+    $tx = dendaTransaction(10, [
+        'denda_mode' => 'nominal',
+        'denda_value' => 20_000,
+    ]);
+
+    expect(LateFee::amount($tx))->toBe(200_000)
+        ->and(LateFee::ruleFor($tx)['custom'])->toBeTrue();
+});
+
+test('an item rule applies even when the shop charges nothing', function () {
+    dendaRule('off', 0);
+    $tx = dendaTransaction(10, [
+        'denda_mode' => 'percent_principal',
+        'denda_value' => 1,
+    ]);
+
+    // 1% of 1jt is 10.000 a day, over 10 days.
+    expect(LateFee::amount($tx))->toBe(100_000);
+});
+
+test('an item can be exempted while the shop still charges', function () {
+    dendaRule('nominal', 5_000);
+    $tx = dendaTransaction(10, ['denda_mode' => 'off', 'denda_value' => 0]);
+
+    expect(LateFee::amount($tx))->toBe(0);
+});
+
+test('the shop grace period and cap still apply to an item rule', function () {
+    dendaRule('nominal', 1_000, grace: 3, max: 4);
+    $tx = dendaTransaction(10, [
+        'denda_mode' => 'nominal',
+        'denda_value' => 10_000,
+    ]);
+
+    // 10 late days, 3 forgiven, capped at 4 chargeable days.
+    expect(LateFee::amount($tx))->toBe(40_000);
+});
+
+test('a gadai can be created with its own late-fee rule', function () {
+    $customer = Customer::create([
+        'code' => 'PLG-701', 'name' => 'Sari', 'phone' => '081200000001',
+        'join_date' => '2026-01-01',
+    ]);
+
+    $this->actingAs(User::factory()->create())->post('/gadai', [
+        'code_mode' => 'auto',
+        'customer_mode' => 'existing',
+        'customer_code' => $customer->code,
+        'device_name' => 'iPhone 15',
+        'kelengkapan' => 'HP saja',
+        'principal' => 1_000_000,
+        'tenor_choice' => '15',
+        'start_date' => now()->toDateString(),
+        'denda_mode' => 'nominal',
+        'denda_value' => 7_500,
+    ])->assertRedirect();
+
+    $tx = Transaction::latest('id')->first();
+
+    expect($tx->denda_mode)->toBe('nominal')
+        ->and((float) $tx->denda_value)->toBe(7_500.0);
+});
+
+test('clearing the item rule puts the pawn back on the shop rule', function () {
+    dendaRule('nominal', 5_000);
+    $customer = Customer::firstOrCreate(
+        ['code' => 'PLG-702'],
+        ['name' => 'Doni', 'phone' => '081200000002', 'join_date' => '2026-01-01'],
+    );
+    $tx = dendaTransaction(10, [
+        'customer_id' => $customer->id,
+        'denda_mode' => 'nominal',
+        'denda_value' => 20_000,
+    ]);
+
+    $this->actingAs(User::factory()->create())->put("/transaksi/{$tx->code}", [
+        'customer_mode' => 'existing',
+        'customer_code' => $customer->code,
+        'device_name' => $tx->device_name,
+        'kelengkapan' => $tx->kelengkapan,
+        'status' => 'AKTIF',
+        'principal' => $tx->principal,
+        'tenor_choice' => '15',
+        'start_date' => $tx->start_date->toDateString(),
+        'denda_mode' => null,
+    ])->assertRedirect();
+
+    $tx->refresh();
+
+    expect($tx->denda_mode)->toBeNull()
+        // Back to the shop's 5.000 a day.
+        ->and(LateFee::amount($tx))->toBe(50_000);
+});

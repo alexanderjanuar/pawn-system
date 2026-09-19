@@ -457,8 +457,14 @@ export default function TransaksiShow({
                                     valueClass="text-primary"
                                     hint={
                                         dendaShown > 0
-                                            ? `+ denda ${formatRupiah(dendaShown)}`
-                                            : undefined
+                                            ? `+ denda ${formatRupiah(dendaShown)}${
+                                                  tx.dendaMode
+                                                      ? ' (aturan khusus)'
+                                                      : ''
+                                              }`
+                                            : tx.dendaMode === 'off'
+                                              ? 'bebas denda'
+                                              : undefined
                                     }
                                     hintClass={
                                         dendaShown > 0

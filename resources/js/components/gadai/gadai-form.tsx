@@ -115,6 +115,18 @@ function tenorChoiceOf(tx: Transaction): TenorChoice {
     return 'custom';
 }
 
+/** Late-fee choice on the form: 'shop' means follow the shop-wide rule. */
+type DendaChoice =
+    'shop' | 'off' | 'percent_principal' | 'percent_fee' | 'nominal';
+
+const DENDA_CHOICES: { key: DendaChoice; label: string }[] = [
+    { key: 'shop', label: 'Ikut aturan toko' },
+    { key: 'off', label: 'Tidak ada denda' },
+    { key: 'percent_principal', label: 'Persen dari dana titipan / hari' },
+    { key: 'percent_fee', label: 'Persen dari biaya titipan / hari' },
+    { key: 'nominal', label: 'Nominal tetap / hari' },
+];
+
 /** One rack the clerk can pick, with how full it is. */
 export type RakOption = {
     id: number;
@@ -200,6 +212,9 @@ export function GadaiForm({
         kelengkapan: transaction?.device.kelengkapan ?? '',
         status: transaction?.status ?? 'AKTIF',
         clerk: transaction?.clerk ?? '',
+        // 'shop' keeps this pawn on the shop-wide late-fee rule.
+        denda_mode: (transaction?.dendaMode ?? 'shop') as DendaChoice,
+        denda_value: transaction?.dendaValue ?? 0,
         rak_id: transaction?.rakId
             ? String(transaction.rakId)
             : (rakList.find((r) => r.recommended)?.id.toString() ?? 'none'),
@@ -418,6 +433,8 @@ export function GadaiForm({
                 ...current,
                 ktp: current.ktp[0] ?? null,
                 rak_id: current.rak_id === 'none' ? null : current.rak_id,
+                denda_mode:
+                    current.denda_mode === 'shop' ? null : current.denda_mode,
                 _method: 'put',
             }));
             post(`/transaksi/${transaction.id}`, {
@@ -439,6 +456,8 @@ export function GadaiForm({
                 ...current,
                 ktp: current.ktp[0] ?? null,
                 rak_id: current.rak_id === 'none' ? null : current.rak_id,
+                denda_mode:
+                    current.denda_mode === 'shop' ? null : current.denda_mode,
                 cetak: pendingCetak ? 1 : 0,
                 kirim_wa: current.kirim_wa ? 1 : 0,
             };
@@ -1579,6 +1598,89 @@ export function GadaiForm({
                                             ))}
                                         </SelectContent>
                                     </Select>
+                                </Field>
+                                <Field
+                                    label="Denda keterlambatan"
+                                    htmlFor="denda-mode"
+                                    hint={
+                                        data.denda_mode === 'shop'
+                                            ? 'Mengikuti aturan denda toko. Ubah hanya bila barang ini perlu denda sendiri.'
+                                            : data.denda_mode === 'off'
+                                              ? 'Barang ini dibebaskan dari denda.'
+                                              : undefined
+                                    }
+                                >
+                                    <div className="grid gap-2 sm:grid-cols-[1fr_9rem]">
+                                        <Select
+                                            value={data.denda_mode}
+                                            onValueChange={(v) =>
+                                                setData(
+                                                    'denda_mode',
+                                                    v as DendaChoice,
+                                                )
+                                            }
+                                        >
+                                            <SelectTrigger
+                                                id="denda-mode"
+                                                className="w-full"
+                                            >
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {DENDA_CHOICES.map((c) => (
+                                                    <SelectItem
+                                                        key={c.key}
+                                                        value={c.key}
+                                                    >
+                                                        {c.label}
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                        {data.denda_mode !== 'shop' &&
+                                            data.denda_mode !== 'off' && (
+                                                <div className="relative">
+                                                    {data.denda_mode ===
+                                                        'nominal' && (
+                                                        <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
+                                                            Rp
+                                                        </span>
+                                                    )}
+                                                    <Input
+                                                        id="denda-value"
+                                                        inputMode="decimal"
+                                                        value={
+                                                            data.denda_value ||
+                                                            ''
+                                                        }
+                                                        onChange={(e) =>
+                                                            setData(
+                                                                'denda_value',
+                                                                parseFloat(
+                                                                    e.target.value.replace(
+                                                                        /[^\d.]/g,
+                                                                        '',
+                                                                    ),
+                                                                ) || 0,
+                                                            )
+                                                        }
+                                                        placeholder="0"
+                                                        className={
+                                                            data.denda_mode ===
+                                                            'nominal'
+                                                                ? 'pl-9 tabular-nums'
+                                                                : 'pr-8 tabular-nums'
+                                                        }
+                                                    />
+                                                    {data.denda_mode !==
+                                                        'nominal' && (
+                                                        <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">
+                                                            %
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            )}
+                                    </div>
                                 </Field>
                                 <Field
                                     label="Catatan"

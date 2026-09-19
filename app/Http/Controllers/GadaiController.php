@@ -122,6 +122,7 @@ class GadaiController extends Controller
             'tenor_days' => $terms['days'],
             'fee_percent' => $terms['percent'],
             'fee' => $terms['fee'],
+            ...$this->dendaAttributes($data),
             'start_date' => $startDate,
             'due_date' => $startDate->copy()->addDays($terms['days']),
             'status' => 'AKTIF',
@@ -302,6 +303,7 @@ class GadaiController extends Controller
             'tenor_days' => $tenorDays,
             'fee_percent' => $terms['percent'],
             'fee' => $terms['fee'],
+            ...$this->dendaAttributes($data),
             'start_date' => $startDate,
             'due_date' => $dueDate,
             'notes' => $data['notes'] ?? null,
@@ -925,6 +927,27 @@ class GadaiController extends Controller
         $cutPercent = ($feeBefore - $feeAfter) / $feeBefore * 100;
 
         return $cutPercent > $limit;
+    }
+
+    /**
+     * The item's own late-fee rule, when the shop set one for it. A blank mode
+     * clears the override so the pawn follows the shop-wide rule again.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array{denda_mode: string|null, denda_value: float|null}
+     */
+    private function dendaAttributes(array $data): array
+    {
+        $mode = $data['denda_mode'] ?? null;
+
+        if (! is_string($mode) || ! in_array($mode, LateFee::MODES, true)) {
+            return ['denda_mode' => null, 'denda_value' => null];
+        }
+
+        return [
+            'denda_mode' => $mode,
+            'denda_value' => $mode === 'off' ? 0 : (float) ($data['denda_value'] ?? 0),
+        ];
     }
 
     private function rupiah(int $amount): string

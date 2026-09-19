@@ -47,6 +47,30 @@ class LateFee
         ];
     }
 
+    /**
+     * The rule that actually applies to one item: its own when the shop set a
+     * special one for it, otherwise the shop-wide rule. The grace period and
+     * the cap stay shop policy either way.
+     *
+     * @return array{mode: string, value: float, graceDays: int, maxDays: int, custom: bool}
+     */
+    public static function ruleFor(Transaction $transaction): array
+    {
+        $rule = self::settings();
+        $mode = $transaction->denda_mode;
+
+        if ($mode !== null && in_array($mode, self::MODES, true)) {
+            return [
+                ...$rule,
+                'mode' => $mode,
+                'value' => max(0, (float) $transaction->denda_value),
+                'custom' => true,
+            ];
+        }
+
+        return [...$rule, 'custom' => false];
+    }
+
     public static function isActive(): bool
     {
         $settings = self::settings();
@@ -70,10 +94,10 @@ class LateFee
      */
     public static function chargeableDays(Transaction $transaction, ?CarbonInterface $on = null): int
     {
-        $settings = self::settings();
-        $days = max(0, self::daysLate($transaction, $on) - $settings['graceDays']);
+        $rule = self::ruleFor($transaction);
+        $days = max(0, self::daysLate($transaction, $on) - $rule['graceDays']);
 
-        return $settings['maxDays'] > 0 ? min($days, $settings['maxDays']) : $days;
+        return $rule['maxDays'] > 0 ? min($days, $rule['maxDays']) : $days;
     }
 
     /**
@@ -82,12 +106,12 @@ class LateFee
      */
     public static function perDay(Transaction $transaction): int
     {
-        $settings = self::settings();
+        $rule = self::ruleFor($transaction);
 
-        return match ($settings['mode']) {
-            'percent_principal' => (int) round($transaction->principal * $settings['value'] / 100),
-            'percent_fee' => (int) round($transaction->fee * $settings['value'] / 100),
-            'nominal' => (int) round($settings['value']),
+        return match ($rule['mode']) {
+            'percent_principal' => (int) round($transaction->principal * $rule['value'] / 100),
+            'percent_fee' => (int) round($transaction->fee * $rule['value'] / 100),
+            'nominal' => (int) round($rule['value']),
             default => 0,
         };
     }
@@ -98,7 +122,15 @@ class LateFee
      */
     public static function amount(Transaction $transaction, ?CarbonInterface $on = null): int
     {
-        if (! self::isActive() || ! in_array($transaction->status, self::ACCRUING, true)) {
+        if (! in_array($transaction->status, self::ACCRUING, true)) {
+            return 0;
+        }
+
+        // An item's own rule wins over the shop's, in both directions: it can
+        // charge where the shop charges nothing, and exempt where the shop does.
+        $rule = self::ruleFor($transaction);
+
+        if ($rule['mode'] === 'off' || $rule['value'] <= 0) {
             return 0;
         }
 

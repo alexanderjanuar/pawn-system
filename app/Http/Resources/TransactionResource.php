@@ -67,6 +67,8 @@ class TransactionResource extends JsonResource
             // Null mode means this pawn follows the shop-wide rule.
             'dendaMode' => $this->denda_mode,
             'dendaValue' => $this->denda_value === null ? null : (float) $this->denda_value,
+            'dendaGraceDays' => $this->denda_grace_days,
+            'dendaMaxDays' => $this->denda_max_days,
             'daysLate' => LateFee::daysLate($this->resource),
             'saleValue' => $this->sale_value,
             'soldAt' => $this->sold_at?->format('Y-m-d'),

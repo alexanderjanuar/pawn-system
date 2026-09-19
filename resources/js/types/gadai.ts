@@ -155,6 +155,8 @@ export type Transaction = {
     daysLate: number; // jumlah hari lewat jatuh tempo (0 bila belum)
     dendaMode: string | null; // null = ikut aturan denda toko
     dendaValue: number | null;
+    dendaGraceDays: number | null;
+    dendaMaxDays: number | null;
     saleValue?: number | null; // nilai jual lelang
     soldAt?: string | null; // tanggal terjual lelang
     startDate: string; // ISO tanggal masuk

@@ -53,6 +53,8 @@ class UpdateGadaiRequest extends FormRequest
             // Optional late-fee rule just for this item; null follows the shop.
             'denda_mode' => ['nullable', 'in:'.implode(',', LateFee::MODES)],
             'denda_value' => ['nullable', 'numeric', 'min:0', 'max:100000000'],
+            'denda_grace_days' => ['nullable', 'integer', 'min:0', 'max:365'],
+            'denda_max_days' => ['nullable', 'integer', 'min:0', 'max:3650'],
             'rak_id' => ['nullable', 'integer', 'exists:raks,id'],
             'principal' => ['required', 'integer', 'min:1'],
             'tenor_choice' => ['required', 'in:15,30,custom'],

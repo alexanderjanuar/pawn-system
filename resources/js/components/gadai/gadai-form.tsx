@@ -184,6 +184,9 @@ export function GadaiForm({
     }, [customers, transaction]);
 
     const wallets = useWallets();
+    // The shop's own rule, used to seed a per-item override sensibly.
+    const shopDenda = usePage().props.dendaRule;
+
     const { data, setData, post, processing, errors, transform } = useForm({
         code_mode: 'auto',
         code: '',
@@ -215,6 +218,8 @@ export function GadaiForm({
         // 'shop' keeps this pawn on the shop-wide late-fee rule.
         denda_mode: (transaction?.dendaMode ?? 'shop') as DendaChoice,
         denda_value: transaction?.dendaValue ?? 0,
+        denda_grace_days: transaction?.dendaGraceDays ?? shopDenda.graceDays,
+        denda_max_days: transaction?.dendaMaxDays ?? shopDenda.maxDays,
         rak_id: transaction?.rakId
             ? String(transaction.rakId)
             : (rakList.find((r) => r.recommended)?.id.toString() ?? 'none'),
@@ -388,6 +393,9 @@ export function GadaiForm({
         toast.error('Periksa kembali data yang diisi.', {
             description: 'Ada isian yang belum lengkap atau tidak valid.',
         });
+
+    // A charging override reveals its rate and limits; 'shop' and 'off' do not.
+    const dendaCustom = data.denda_mode !== 'shop' && data.denda_mode !== 'off';
 
     // Split funding (if used) must add up to the principal.
     const fundingValid = isFundingValid(data.wallet_split, data.principal);
@@ -1602,84 +1610,175 @@ export function GadaiForm({
                                 <Field
                                     label="Denda keterlambatan"
                                     htmlFor="denda-mode"
+                                    className="sm:col-span-2"
                                     hint={
                                         data.denda_mode === 'shop'
-                                            ? 'Mengikuti aturan denda toko. Ubah hanya bila barang ini perlu denda sendiri.'
+                                            ? 'Mengikuti aturan denda toko. Ubah hanya bila barang ini perlu aturan sendiri.'
                                             : data.denda_mode === 'off'
-                                              ? 'Barang ini dibebaskan dari denda.'
-                                              : undefined
+                                              ? 'Barang ini dibebaskan dari denda, walau toko menerapkannya.'
+                                              : 'Berlaku khusus barang ini, menggantikan aturan toko.'
                                     }
                                 >
-                                    <div className="grid gap-2 sm:grid-cols-[1fr_9rem]">
-                                        <Select
-                                            value={data.denda_mode}
-                                            onValueChange={(v) =>
-                                                setData(
-                                                    'denda_mode',
-                                                    v as DendaChoice,
-                                                )
-                                            }
+                                    <div
+                                        className={cn(
+                                            'grid gap-3',
+                                            dendaCustom
+                                                ? 'sm:grid-cols-2 lg:grid-cols-4'
+                                                : 'sm:max-w-xs',
+                                        )}
+                                    >
+                                        <SubField
+                                            label="Cara hitung"
+                                            htmlFor="denda-mode"
                                         >
-                                            <SelectTrigger
-                                                id="denda-mode"
-                                                className="w-full"
+                                            <Select
+                                                value={data.denda_mode}
+                                                onValueChange={(v) =>
+                                                    setData(
+                                                        'denda_mode',
+                                                        v as DendaChoice,
+                                                    )
+                                                }
                                             >
-                                                <SelectValue />
-                                            </SelectTrigger>
-                                            <SelectContent>
-                                                {DENDA_CHOICES.map((c) => (
-                                                    <SelectItem
-                                                        key={c.key}
-                                                        value={c.key}
-                                                    >
-                                                        {c.label}
-                                                    </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                        {data.denda_mode !== 'shop' &&
-                                            data.denda_mode !== 'off' && (
-                                                <div className="relative">
-                                                    {data.denda_mode ===
-                                                        'nominal' && (
-                                                        <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
-                                                            Rp
-                                                        </span>
-                                                    )}
-                                                    <Input
-                                                        id="denda-value"
-                                                        inputMode="decimal"
-                                                        value={
-                                                            data.denda_value ||
-                                                            ''
-                                                        }
-                                                        onChange={(e) =>
-                                                            setData(
-                                                                'denda_value',
-                                                                parseFloat(
-                                                                    e.target.value.replace(
-                                                                        /[^\d.]/g,
-                                                                        '',
-                                                                    ),
-                                                                ) || 0,
-                                                            )
-                                                        }
-                                                        placeholder="0"
-                                                        className={
-                                                            data.denda_mode ===
-                                                            'nominal'
-                                                                ? 'pl-9 tabular-nums'
-                                                                : 'pr-8 tabular-nums'
-                                                        }
-                                                    />
-                                                    {data.denda_mode !==
-                                                        'nominal' && (
+                                                <SelectTrigger
+                                                    id="denda-mode"
+                                                    className="w-full"
+                                                >
+                                                    <SelectValue />
+                                                </SelectTrigger>
+                                                <SelectContent>
+                                                    {DENDA_CHOICES.map((c) => (
+                                                        <SelectItem
+                                                            key={c.key}
+                                                            value={c.key}
+                                                        >
+                                                            {c.label}
+                                                        </SelectItem>
+                                                    ))}
+                                                </SelectContent>
+                                            </Select>
+                                        </SubField>
+
+                                        {dendaCustom && (
+                                            <>
+                                                <SubField
+                                                    label={
+                                                        data.denda_mode ===
+                                                        'nominal'
+                                                            ? 'Denda per hari'
+                                                            : 'Persen per hari'
+                                                    }
+                                                    htmlFor="denda-value"
+                                                >
+                                                    <div className="relative">
+                                                        {data.denda_mode ===
+                                                            'nominal' && (
+                                                            <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
+                                                                Rp
+                                                            </span>
+                                                        )}
+                                                        <Input
+                                                            id="denda-value"
+                                                            inputMode="decimal"
+                                                            value={
+                                                                data.denda_value ||
+                                                                ''
+                                                            }
+                                                            onChange={(e) =>
+                                                                setData(
+                                                                    'denda_value',
+                                                                    parseFloat(
+                                                                        e.target.value.replace(
+                                                                            /[^\d.]/g,
+                                                                            '',
+                                                                        ),
+                                                                    ) || 0,
+                                                                )
+                                                            }
+                                                            placeholder="0"
+                                                            className={
+                                                                data.denda_mode ===
+                                                                'nominal'
+                                                                    ? 'pl-9 tabular-nums'
+                                                                    : 'pr-8 tabular-nums'
+                                                            }
+                                                        />
+                                                        {data.denda_mode !==
+                                                            'nominal' && (
+                                                            <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">
+                                                                %
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                </SubField>
+
+                                                <SubField
+                                                    label="Masa tenggang"
+                                                    htmlFor="denda-grace"
+                                                >
+                                                    <div className="relative">
+                                                        <Input
+                                                            id="denda-grace"
+                                                            inputMode="numeric"
+                                                            value={
+                                                                data.denda_grace_days ||
+                                                                ''
+                                                            }
+                                                            onChange={(e) =>
+                                                                setData(
+                                                                    'denda_grace_days',
+                                                                    parseInt(
+                                                                        e.target.value.replace(
+                                                                            /\D/g,
+                                                                            '',
+                                                                        ),
+                                                                        10,
+                                                                    ) || 0,
+                                                                )
+                                                            }
+                                                            placeholder="0"
+                                                            className="pr-14 tabular-nums"
+                                                        />
                                                         <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">
-                                                            %
+                                                            hari
                                                         </span>
-                                                    )}
-                                                </div>
-                                            )}
+                                                    </div>
+                                                </SubField>
+
+                                                <SubField
+                                                    label="Batas maksimal"
+                                                    htmlFor="denda-max"
+                                                >
+                                                    <div className="relative">
+                                                        <Input
+                                                            id="denda-max"
+                                                            inputMode="numeric"
+                                                            value={
+                                                                data.denda_max_days ||
+                                                                ''
+                                                            }
+                                                            onChange={(e) =>
+                                                                setData(
+                                                                    'denda_max_days',
+                                                                    parseInt(
+                                                                        e.target.value.replace(
+                                                                            /\D/g,
+                                                                            '',
+                                                                        ),
+                                                                        10,
+                                                                    ) || 0,
+                                                                )
+                                                            }
+                                                            placeholder="0"
+                                                            className="pr-14 tabular-nums"
+                                                        />
+                                                        <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">
+                                                            hari
+                                                        </span>
+                                                    </div>
+                                                </SubField>
+                                            </>
+                                        )}
                                     </div>
                                 </Field>
                                 <Field
@@ -2160,6 +2259,29 @@ function Field({
             </Label>
             {children}
             {hint && <p className="text-xs text-muted-foreground">{hint}</p>}
+        </div>
+    );
+}
+
+/** A labelled control inside a field that groups several inputs. */
+function SubField({
+    label,
+    htmlFor,
+    children,
+}: {
+    label: string;
+    htmlFor: string;
+    children: ReactNode;
+}) {
+    return (
+        <div className="grid gap-1.5">
+            <Label
+                htmlFor={htmlFor}
+                className="text-xs font-normal text-muted-foreground"
+            >
+                {label}
+            </Label>
+            {children}
         </div>
     );
 }

@@ -277,3 +277,86 @@ test('clearing the item rule puts the pawn back on the shop rule', function () {
         // Back to the shop's 5.000 a day.
         ->and(LateFee::amount($tx))->toBe(50_000);
 });
+
+test('an item can carry its own grace period and cap', function () {
+    dendaRule('nominal', 1_000, grace: 0, max: 0);
+    $tx = dendaTransaction(20, [
+        'denda_mode' => 'nominal',
+        'denda_value' => 10_000,
+        'denda_grace_days' => 5,
+        'denda_max_days' => 7,
+    ]);
+
+    // 20 late days, 5 forgiven, capped at 7 chargeable days.
+    expect(LateFee::amount($tx))->toBe(70_000);
+});
+
+test('an item limit left empty still follows the shop', function () {
+    dendaRule('nominal', 1_000, grace: 4, max: 6);
+    $tx = dendaTransaction(20, [
+        'denda_mode' => 'nominal',
+        'denda_value' => 10_000,
+        'denda_grace_days' => null,
+        'denda_max_days' => null,
+    ]);
+
+    // Shop's 4-day grace and 6-day cap apply to the item's own rate.
+    expect(LateFee::amount($tx))->toBe(60_000);
+});
+
+test('a gadai stores its own grace period and cap', function () {
+    $customer = Customer::create([
+        'code' => 'PLG-703', 'name' => 'Iwan', 'phone' => '081200000003',
+        'join_date' => '2026-01-01',
+    ]);
+
+    $this->actingAs(User::factory()->create())->post('/gadai', [
+        'code_mode' => 'auto',
+        'customer_mode' => 'existing',
+        'customer_code' => $customer->code,
+        'device_name' => 'Redmi 13C',
+        'kelengkapan' => 'HP saja',
+        'principal' => 1_000_000,
+        'tenor_choice' => '15',
+        'start_date' => now()->toDateString(),
+        'denda_mode' => 'percent_principal',
+        'denda_value' => 0.25,
+        'denda_grace_days' => 5,
+        'denda_max_days' => 20,
+    ])->assertRedirect();
+
+    $tx = Transaction::latest('id')->first();
+
+    expect($tx->denda_mode)->toBe('percent_principal')
+        ->and((float) $tx->denda_value)->toBe(0.25)
+        ->and($tx->denda_grace_days)->toBe(5)
+        ->and($tx->denda_max_days)->toBe(20);
+});
+
+test('exempting an item clears its rate and limits', function () {
+    $customer = Customer::create([
+        'code' => 'PLG-704', 'name' => 'Yuni', 'phone' => '081200000004',
+        'join_date' => '2026-01-01',
+    ]);
+
+    $this->actingAs(User::factory()->create())->post('/gadai', [
+        'code_mode' => 'auto',
+        'customer_mode' => 'existing',
+        'customer_code' => $customer->code,
+        'device_name' => 'Oppo A17',
+        'kelengkapan' => 'HP saja',
+        'principal' => 1_000_000,
+        'tenor_choice' => '15',
+        'start_date' => now()->toDateString(),
+        'denda_mode' => 'off',
+        'denda_value' => 9_999,
+        'denda_grace_days' => 9,
+        'denda_max_days' => 9,
+    ])->assertRedirect();
+
+    $tx = Transaction::latest('id')->first();
+
+    expect($tx->denda_mode)->toBe('off')
+        ->and($tx->denda_grace_days)->toBeNull()
+        ->and($tx->denda_max_days)->toBeNull();
+});

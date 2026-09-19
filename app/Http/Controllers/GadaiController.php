@@ -934,19 +934,34 @@ class GadaiController extends Controller
      * clears the override so the pawn follows the shop-wide rule again.
      *
      * @param  array<string, mixed>  $data
-     * @return array{denda_mode: string|null, denda_value: float|null}
+     * @return array{denda_mode: string|null, denda_value: float|null, denda_grace_days: int|null, denda_max_days: int|null}
      */
     private function dendaAttributes(array $data): array
     {
         $mode = $data['denda_mode'] ?? null;
+        $none = [
+            'denda_mode' => null, 'denda_value' => null,
+            'denda_grace_days' => null, 'denda_max_days' => null,
+        ];
 
         if (! is_string($mode) || ! in_array($mode, LateFee::MODES, true)) {
-            return ['denda_mode' => null, 'denda_value' => null];
+            return $none;
+        }
+
+        // An exempt item has no rate or limits worth keeping.
+        if ($mode === 'off') {
+            return [...$none, 'denda_mode' => 'off', 'denda_value' => 0];
         }
 
         return [
             'denda_mode' => $mode,
-            'denda_value' => $mode === 'off' ? 0 : (float) ($data['denda_value'] ?? 0),
+            'denda_value' => (float) ($data['denda_value'] ?? 0),
+            'denda_grace_days' => isset($data['denda_grace_days'])
+                ? (int) $data['denda_grace_days']
+                : null,
+            'denda_max_days' => isset($data['denda_max_days'])
+                ? (int) $data['denda_max_days']
+                : null,
         ];
     }
 

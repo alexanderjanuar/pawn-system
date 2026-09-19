@@ -61,9 +61,15 @@ class LateFee
 
         if ($mode !== null && in_array($mode, self::MODES, true)) {
             return [
-                ...$rule,
                 'mode' => $mode,
                 'value' => max(0, (float) $transaction->denda_value),
+                // Each limit falls back to the shop's when left unset.
+                'graceDays' => $transaction->denda_grace_days === null
+                    ? $rule['graceDays']
+                    : max(0, (int) $transaction->denda_grace_days),
+                'maxDays' => $transaction->denda_max_days === null
+                    ? $rule['maxDays']
+                    : max(0, (int) $transaction->denda_max_days),
                 'custom' => true,
             ];
         }

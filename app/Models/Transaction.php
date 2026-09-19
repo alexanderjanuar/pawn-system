@@ -44,6 +44,8 @@ use Illuminate\Support\Str;
  * @property int $denda
  * @property string|null $denda_mode
  * @property float|null $denda_value
+ * @property int|null $denda_grace_days
+ * @property int|null $denda_max_days
  * @property int|null $sale_value
  * @property Carbon|null $sold_at
  * @property Carbon $start_date
@@ -61,7 +63,7 @@ use Illuminate\Support\Str;
     'device_storage', 'device_serial', 'imei_1', 'imei_2', 'device_lock_type', 'device_lock_value',
     'plat_nomor', 'no_rangka', 'no_mesin', 'warna', 'tahun',
     'kelengkapan', 'principal', 'tenor_days',
-    'fee_percent', 'fee', 'denda', 'denda_mode', 'denda_value', 'start_date', 'due_date', 'status', 'clerk', 'notes',
+    'fee_percent', 'fee', 'denda', 'denda_mode', 'denda_value', 'denda_grace_days', 'denda_max_days', 'start_date', 'due_date', 'status', 'clerk', 'notes',
     'extensions', 'photos', 'ktp_path',
     'approval_status', 'approved_by', 'approved_at',
     'sale_value', 'sold_at', 'share_token',

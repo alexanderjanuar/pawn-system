@@ -20,6 +20,13 @@ declare module '@inertiajs/core' {
             activeStore: number | 'all';
             activeStoreName: string | null;
             serverDate: string; // YYYY-MM-DD, WITA — authoritative "today"
+            /** Shop's late-fee rule, so a redemption can price any date. */
+            dendaRule: {
+                mode: 'off' | 'percent_principal' | 'percent_fee' | 'nominal';
+                value: number;
+                graceDays: number;
+                maxDays: number;
+            };
             flash: {
                 success: string | null;
                 error: string | null;

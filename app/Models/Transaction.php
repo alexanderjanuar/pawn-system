@@ -41,6 +41,7 @@ use Illuminate\Support\Str;
  * @property int $tenor_days
  * @property int $fee_percent
  * @property int $fee
+ * @property int $denda
  * @property int|null $sale_value
  * @property Carbon|null $sold_at
  * @property Carbon $start_date
@@ -58,7 +59,7 @@ use Illuminate\Support\Str;
     'device_storage', 'device_serial', 'imei_1', 'imei_2', 'device_lock_type', 'device_lock_value',
     'plat_nomor', 'no_rangka', 'no_mesin', 'warna', 'tahun',
     'kelengkapan', 'principal', 'tenor_days',
-    'fee_percent', 'fee', 'start_date', 'due_date', 'status', 'clerk', 'notes',
+    'fee_percent', 'fee', 'denda', 'start_date', 'due_date', 'status', 'clerk', 'notes',
     'extensions', 'photos', 'ktp_path',
     'approval_status', 'approved_by', 'approved_at',
     'sale_value', 'sold_at', 'share_token',
@@ -89,6 +90,7 @@ class Transaction extends Model
             'due_date' => 'date',
             'principal' => 'integer',
             'fee' => 'integer',
+            'denda' => 'integer',
             'fee_percent' => 'integer',
             'tenor_days' => 'integer',
             'extensions' => 'integer',

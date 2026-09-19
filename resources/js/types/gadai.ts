@@ -149,6 +149,10 @@ export type Transaction = {
     tenorDays: number;
     feePercent: number;
     fee: number; // biaya titipan
+    denda: number; // denda yang sudah ditagih saat ditebus
+    dendaDue: number; // denda berjalan selama masih lewat jatuh tempo
+    dendaPerDay: number; // denda per hari menurut pengaturan toko
+    daysLate: number; // jumlah hari lewat jatuh tempo (0 bila belum)
     saleValue?: number | null; // nilai jual lelang
     soldAt?: string | null; // tanggal terjual lelang
     startDate: string; // ISO tanggal masuk

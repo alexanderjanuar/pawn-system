@@ -8,8 +8,12 @@ export type NextDue = { seq: number; amount: number; dueDate: string };
  * Default WhatsApp reminder text for a due or overdue pawn loan.
  * `*text*` renders as bold in WhatsApp. The clerk can edit this before sending.
  */
-export function buildReminderMessage(tx: Transaction, shopName: string): string {
-    const total = tx.principal + tx.fee;
+export function buildReminderMessage(
+    tx: Transaction,
+    shopName: string,
+): string {
+    const denda = tx.dendaDue ?? 0;
+    const total = tx.principal + tx.fee + denda;
     const d = daysUntil(tx.dueDate);
 
     const situation =
@@ -19,7 +23,7 @@ export function buildReminderMessage(tx: Transaction, shopName: string): string 
               ? '*jatuh tempo hari ini*'
               : `akan *jatuh tempo dalam ${d} hari*`;
 
-    return [
+    const lines = [
         `Halo ${tx.customer.name},`,
         '',
         `Kami dari ${shopName} mengingatkan bahwa gadai Anda ${situation}.`,
@@ -27,12 +31,33 @@ export function buildReminderMessage(tx: Transaction, shopName: string): string 
         `No. Nota: ${tx.id}`,
         `Barang: ${tx.device.name}`,
         `Jatuh tempo: ${formatDate(tx.dueDate)}`,
+        `Dana titipan: ${formatRupiah(tx.principal)}`,
+        `Biaya titipan: ${formatRupiah(tx.fee)}`,
+    ];
+
+    // Only spell the penalty out when there actually is one, so an on-time
+    // reminder never mentions a charge the customer does not owe.
+    if (denda > 0) {
+        lines.push(
+            `Denda keterlambatan: ${formatRupiah(denda)}${
+                tx.dendaPerDay > 0
+                    ? ` (${formatRupiah(tx.dendaPerDay)} x ${Math.round(denda / tx.dendaPerDay)} hari)`
+                    : ''
+            }`,
+        );
+    }
+
+    lines.push(
         `Total tebus: *${formatRupiah(total)}*`,
         '',
-        'Mohon segera melakukan penebusan atau perpanjangan agar barang tidak masuk daftar lelang.',
+        denda > 0
+            ? 'Denda bertambah setiap hari selama belum ditebus. Mohon segera menebus atau memperpanjang agar barang tidak masuk daftar lelang.'
+            : 'Mohon segera melakukan penebusan atau perpanjangan agar barang tidak masuk daftar lelang.',
         '',
         'Terima kasih.',
-    ].join('\n');
+    );
+
+    return lines.join('\n');
 }
 
 /**

@@ -162,7 +162,8 @@ export default function CekStatus({
 }
 
 function ResultCard({ tx }: { tx: Transaction }) {
-    const total = tx.principal + tx.fee;
+    const denda = tx.status === 'DIAMBIL' ? tx.denda : tx.dendaDue;
+    const total = tx.principal + tx.fee + denda;
     const running = !STATUS_META[tx.status].terminal;
     const d = daysUntil(tx.dueDate);
 
@@ -189,6 +190,13 @@ function ResultCard({ tx }: { tx: Transaction }) {
                     value={formatRupiah(tx.fee)}
                     className="border-l"
                 />
+                {denda > 0 && (
+                    <Cell
+                        label="Denda Keterlambatan"
+                        value={formatRupiah(denda)}
+                        className="col-span-2 border-t sm:col-span-3"
+                    />
+                )}
                 <Cell
                     label="Total Tebus"
                     value={formatRupiah(total)}
@@ -220,11 +228,17 @@ function ResultCard({ tx }: { tx: Transaction }) {
                 </div>
                 {running && (
                     <p className="mt-3 rounded-lg bg-accent/60 p-3 text-xs text-muted-foreground">
-                        Tebus sebelum jatuh tempo dengan membayar{' '}
+                        {denda > 0
+                            ? 'Tebus segera'
+                            : 'Tebus sebelum jatuh tempo'}{' '}
+                        dengan membayar{' '}
                         <span className="font-medium text-foreground">
                             {formatRupiah(total)}
                         </span>{' '}
-                        di counter. Butuh waktu lebih? Anda bisa memperpanjang.
+                        di counter.{' '}
+                        {denda > 0
+                            ? 'Denda bertambah setiap hari selama belum ditebus.'
+                            : 'Butuh waktu lebih? Anda bisa memperpanjang.'}
                     </p>
                 )}
             </div>
@@ -244,7 +258,9 @@ function Cell({
     className?: string;
 }) {
     return (
-        <div className={cn('flex min-w-0 flex-col gap-1 p-4 sm:p-5', className)}>
+        <div
+            className={cn('flex min-w-0 flex-col gap-1 p-4 sm:p-5', className)}
+        >
             <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
                 {label}
             </span>

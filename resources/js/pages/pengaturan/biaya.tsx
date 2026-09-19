@@ -1,5 +1,6 @@
 import { Head, useForm } from '@inertiajs/react';
 import {
+    AlarmClock,
     Gavel,
     MessageCircle,
     Plus,
@@ -14,25 +15,85 @@ import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
+} from '@/components/ui/select';
 import { formatRupiah } from '@/lib/format';
 
 type Rule = { id: number; days: number; percent: number };
 
+type DendaMode = 'off' | 'percent_principal' | 'percent_fee' | 'nominal';
+
+type DendaRule = {
+    mode: DendaMode;
+    value: number;
+    graceDays: number;
+    maxDays: number;
+};
+
+const DENDA_MODES: { key: DendaMode; label: string }[] = [
+    { key: 'off', label: 'Tidak ada denda' },
+    { key: 'percent_principal', label: 'Persen dari dana titipan, per hari' },
+    { key: 'percent_fee', label: 'Persen dari biaya titipan, per hari' },
+    { key: 'nominal', label: 'Nominal tetap, per hari' },
+];
+
 export default function PengaturanBiaya({
     approvalThreshold,
     maxDiscountPercent,
+    denda,
 }: {
     approvalThreshold: number;
     maxDiscountPercent: number;
+    denda: DendaRule;
 }) {
     const approval = useForm({ approval_threshold: approvalThreshold });
     const discount = useForm({ max_discount_percent: maxDiscountPercent });
+    const lateFee = useForm({
+        denda_mode: denda.mode,
+        denda_value: denda.value,
+        denda_grace_days: denda.graceDays,
+        denda_max_days: denda.maxDays,
+    });
 
     const saveApproval = () =>
         approval.put('/pengaturan/biaya', { preserveScroll: true });
 
     const saveDiscount = () =>
         discount.put('/pengaturan/biaya', { preserveScroll: true });
+
+    const saveLateFee = () =>
+        lateFee.put('/pengaturan/biaya', { preserveScroll: true });
+
+    // Worked example on a round loan, so the rule is obvious before saving.
+    const dendaPerDay = (() => {
+        const v = lateFee.data.denda_value;
+
+        switch (lateFee.data.denda_mode) {
+            case 'percent_principal':
+                return Math.round((1_000_000 * v) / 100);
+            case 'percent_fee':
+                return Math.round((100_000 * v) / 100);
+            case 'nominal':
+                return Math.round(v);
+            default:
+                return 0;
+        }
+    })();
+
+    const dendaExampleDays = Math.max(
+        0,
+        Math.min(
+            10 - lateFee.data.denda_grace_days,
+            lateFee.data.denda_max_days > 0
+                ? lateFee.data.denda_max_days
+                : Number.MAX_SAFE_INTEGER,
+        ),
+    );
 
     const [rules, setRules] = useState<Rule[]>([
         { id: 1, days: 15, percent: 10 },
@@ -216,6 +277,215 @@ export default function PengaturanBiaya({
                                     Simpan Batas
                                 </Button>
                             </div>
+                        </div>
+                    </section>
+
+                    {/* Late fee */}
+                    <section className="rounded-xl border bg-card p-5 shadow-sm sm:p-6">
+                        <div className="flex items-center gap-2">
+                            <AlarmClock className="size-4 text-overdue" />
+                            <h2 className="font-semibold">
+                                Denda Keterlambatan
+                            </h2>
+                        </div>
+                        <p className="mt-1 mb-4 text-xs text-muted-foreground">
+                            Denda untuk barang yang lewat jatuh tempo dan belum
+                            ditebus. Ikut ditagih di Total Tebus, muncul di
+                            pesan WhatsApp ke nasabah, dan masuk Kas Harian saat
+                            barang ditebus. Pilih "Tidak ada denda" untuk
+                            mematikannya.
+                        </p>
+
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <div className="grid gap-1.5 sm:col-span-2">
+                                <Label htmlFor="denda-mode">Cara hitung</Label>
+                                <Select
+                                    value={lateFee.data.denda_mode}
+                                    onValueChange={(v) =>
+                                        lateFee.setData(
+                                            'denda_mode',
+                                            v as DendaMode,
+                                        )
+                                    }
+                                >
+                                    <SelectTrigger
+                                        id="denda-mode"
+                                        className="w-full"
+                                    >
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {DENDA_MODES.map((m) => (
+                                            <SelectItem
+                                                key={m.key}
+                                                value={m.key}
+                                            >
+                                                {m.label}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            {lateFee.data.denda_mode !== 'off' && (
+                                <>
+                                    <div className="grid gap-1.5">
+                                        <Label htmlFor="denda-value">
+                                            {lateFee.data.denda_mode ===
+                                            'nominal'
+                                                ? 'Denda per hari'
+                                                : 'Persen per hari'}
+                                        </Label>
+                                        <div className="relative">
+                                            {lateFee.data.denda_mode ===
+                                                'nominal' && (
+                                                <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
+                                                    Rp
+                                                </span>
+                                            )}
+                                            <Input
+                                                id="denda-value"
+                                                inputMode="decimal"
+                                                value={
+                                                    lateFee.data.denda_value ||
+                                                    ''
+                                                }
+                                                onChange={(e) =>
+                                                    lateFee.setData(
+                                                        'denda_value',
+                                                        parseFloat(
+                                                            e.target.value.replace(
+                                                                /[^\d.]/g,
+                                                                '',
+                                                            ),
+                                                        ) || 0,
+                                                    )
+                                                }
+                                                placeholder="0"
+                                                className={
+                                                    lateFee.data.denda_mode ===
+                                                    'nominal'
+                                                        ? 'pl-9 tabular-nums'
+                                                        : 'pr-8 tabular-nums'
+                                                }
+                                            />
+                                            {lateFee.data.denda_mode !==
+                                                'nominal' && (
+                                                <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">
+                                                    %
+                                                </span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="grid gap-1.5">
+                                        <Label htmlFor="denda-grace">
+                                            Masa tenggang
+                                        </Label>
+                                        <div className="relative">
+                                            <Input
+                                                id="denda-grace"
+                                                inputMode="numeric"
+                                                value={
+                                                    lateFee.data
+                                                        .denda_grace_days || ''
+                                                }
+                                                onChange={(e) =>
+                                                    lateFee.setData(
+                                                        'denda_grace_days',
+                                                        parseInt(
+                                                            e.target.value.replace(
+                                                                /\D/g,
+                                                                '',
+                                                            ),
+                                                            10,
+                                                        ) || 0,
+                                                    )
+                                                }
+                                                placeholder="0"
+                                                className="pr-16 tabular-nums"
+                                            />
+                                            <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">
+                                                hari
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            Hari pertama setelah jatuh tempo
+                                            yang dibebaskan dari denda. Isi 0
+                                            bila denda langsung berjalan.
+                                        </p>
+                                    </div>
+
+                                    <div className="grid gap-1.5">
+                                        <Label htmlFor="denda-max">
+                                            Batas maksimal
+                                        </Label>
+                                        <div className="relative">
+                                            <Input
+                                                id="denda-max"
+                                                inputMode="numeric"
+                                                value={
+                                                    lateFee.data
+                                                        .denda_max_days || ''
+                                                }
+                                                onChange={(e) =>
+                                                    lateFee.setData(
+                                                        'denda_max_days',
+                                                        parseInt(
+                                                            e.target.value.replace(
+                                                                /\D/g,
+                                                                '',
+                                                            ),
+                                                            10,
+                                                        ) || 0,
+                                                    )
+                                                }
+                                                placeholder="0"
+                                                className="pr-16 tabular-nums"
+                                            />
+                                            <span className="pointer-events-none absolute top-1/2 right-3 -translate-y-1/2 text-sm text-muted-foreground">
+                                                hari
+                                            </span>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground">
+                                            Denda berhenti bertambah setelah
+                                            sekian hari. Isi 0 bila tanpa batas.
+                                        </p>
+                                    </div>
+                                </>
+                            )}
+                        </div>
+
+                        {lateFee.data.denda_mode !== 'off' &&
+                            dendaPerDay > 0 && (
+                                <p className="mt-4 rounded-lg bg-muted/50 px-3 py-2 text-xs text-muted-foreground">
+                                    Contoh: dana titipan{' '}
+                                    <span className="font-medium text-foreground">
+                                        Rp 1.000.000
+                                    </span>{' '}
+                                    dengan biaya titipan Rp 100.000, telat 10
+                                    hari. Denda ={' '}
+                                    <span className="font-medium text-foreground">
+                                        {formatRupiah(dendaPerDay)}
+                                    </span>{' '}
+                                    x {dendaExampleDays} hari ={' '}
+                                    <span className="font-semibold text-foreground">
+                                        {formatRupiah(
+                                            dendaPerDay * dendaExampleDays,
+                                        )}
+                                    </span>
+                                    .
+                                </p>
+                            )}
+
+                        <div className="mt-4">
+                            <Button
+                                onClick={saveLateFee}
+                                disabled={lateFee.processing}
+                            >
+                                <Save />
+                                Simpan Denda
+                            </Button>
                         </div>
                     </section>
 

@@ -510,7 +510,9 @@ class LaporanController extends Controller
     private function eventInterest(TransactionEvent $event): int
     {
         if ($event->type === 'redeemed') {
-            return max(0, (int) ($event->amount ?? 0) - (int) ($event->transaction?->principal ?? 0));
+            return max(0, (int) ($event->amount ?? 0)
+                - (int) ($event->transaction?->principal ?? 0)
+                - (int) ($event->transaction?->denda ?? 0));
         }
 
         return (int) ($event->amount ?? 0);
@@ -529,7 +531,7 @@ class LaporanController extends Controller
     private function feeIncome(string $from, string $to): array
     {
         $events = $this->feeIncomeEvents()
-            ->with(['transaction:id,customer_id,code,principal,clerk', 'transaction.customer:id,name'])
+            ->with(['transaction:id,customer_id,code,principal,denda,clerk', 'transaction.customer:id,name'])
             ->when($from !== '', fn ($q) => $q->whereDate('event_date', '>=', $from))
             ->when($to !== '', fn ($q) => $q->whereDate('event_date', '<=', $to))
             ->orderByDesc('event_date')
@@ -540,6 +542,8 @@ class LaporanController extends Controller
             ->sum(fn (TransactionEvent $event) => $this->eventInterest($event));
         $tebus = (int) $events->where('type', 'redeemed')
             ->sum(fn (TransactionEvent $event) => $this->eventInterest($event));
+        $denda = (int) $events->where('type', 'redeemed')
+            ->sum(fn (TransactionEvent $event) => (int) ($event->transaction?->denda ?? 0));
 
         $entries = $events->map(fn (TransactionEvent $event) => [
             'id' => $event->id,
@@ -555,7 +559,8 @@ class LaporanController extends Controller
         return [
             'perpanjang' => $perpanjang,
             'tebus' => $tebus,
-            'total' => $perpanjang + $tebus,
+            'denda' => $denda,
+            'total' => $perpanjang + $tebus + $denda,
             'entries' => $entries,
         ];
     }

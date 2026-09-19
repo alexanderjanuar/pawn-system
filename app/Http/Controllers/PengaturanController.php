@@ -8,6 +8,7 @@ use App\Models\Setting;
 use App\Models\Store;
 use App\Models\Transaction;
 use App\Support\ActiveStore;
+use App\Support\LateFee;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
@@ -28,6 +29,7 @@ class PengaturanController extends Controller
                 'max_discount_percent',
                 Transaction::MAX_DISCOUNT_PERCENT,
             ),
+            'denda' => LateFee::settings(),
         ]);
     }
 
@@ -36,6 +38,10 @@ class PengaturanController extends Controller
         $data = $request->validate([
             'approval_threshold' => ['sometimes', 'integer', 'min:0'],
             'max_discount_percent' => ['sometimes', 'integer', 'min:0', 'max:100'],
+            'denda_mode' => ['sometimes', 'in:'.implode(',', LateFee::MODES)],
+            'denda_value' => ['sometimes', 'numeric', 'min:0', 'max:100000000'],
+            'denda_grace_days' => ['sometimes', 'integer', 'min:0', 'max:365'],
+            'denda_max_days' => ['sometimes', 'integer', 'min:0', 'max:3650'],
         ]);
 
         foreach ($data as $key => $value) {

@@ -60,6 +60,8 @@ type FeeIncomeEntry = {
 type FeeIncome = {
     perpanjang: number;
     tebus: number;
+    /** Late-fee income, kept apart from deposit-fee income. */
+    denda: number;
     total: number;
     entries: FeeIncomeEntry[];
 };
@@ -179,7 +181,11 @@ export default function Laporan({
         {
             label: 'Keuntungan',
             value: formatRupiah(feeIncome.total),
-            hint: `Perpanjang ${formatRupiah(feeIncome.perpanjang)} · Tebus ${formatRupiah(feeIncome.tebus)}`,
+            hint:
+                `Perpanjang ${formatRupiah(feeIncome.perpanjang)} · Tebus ${formatRupiah(feeIncome.tebus)}` +
+                (feeIncome.denda > 0
+                    ? ` · Denda ${formatRupiah(feeIncome.denda)}`
+                    : ''),
             icon: TrendingUp,
             tone: 'text-primary',
             highlight: true,
@@ -356,6 +362,9 @@ export default function Laporan({
                                     Perpanjang{' '}
                                     {formatRupiah(feeIncome.perpanjang)} · Tebus{' '}
                                     {formatRupiah(feeIncome.tebus)}
+                                    {feeIncome.denda > 0
+                                        ? ` · Denda ${formatRupiah(feeIncome.denda)}`
+                                        : ''}
                                 </p>
                             </div>
                         </div>

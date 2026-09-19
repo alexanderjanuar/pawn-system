@@ -3,6 +3,7 @@
 namespace App\Http\Resources;
 
 use App\Models\Transaction;
+use App\Support\LateFee;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 use Illuminate\Support\Facades\Storage;
@@ -59,6 +60,11 @@ class TransactionResource extends JsonResource
             'tenorDays' => $this->tenor_days,
             'feePercent' => $this->fee_percent,
             'fee' => $this->fee,
+            // Charged once redeemed; still accruing while the pawn is overdue.
+            'denda' => (int) $this->denda,
+            'dendaDue' => LateFee::amount($this->resource),
+            'dendaPerDay' => LateFee::perDay($this->resource),
+            'daysLate' => LateFee::daysLate($this->resource),
             'saleValue' => $this->sale_value,
             'soldAt' => $this->sold_at?->format('Y-m-d'),
             'startDate' => $this->start_date->format('Y-m-d'),

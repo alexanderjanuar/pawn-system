@@ -1,0 +1,183 @@
+<?php
+
+use App\Models\Customer;
+use App\Models\Setting;
+use App\Models\Transaction;
+use App\Models\User;
+use App\Support\LateFee;
+use Inertia\Testing\AssertableInertia as Assert;
+
+function dendaRule(string $mode, float $value, int $grace = 0, int $max = 0): void
+{
+    Setting::put('denda_mode', $mode);
+    Setting::put('denda_value', $value);
+    Setting::put('denda_grace_days', $grace);
+    Setting::put('denda_max_days', $max);
+}
+
+function dendaTransaction(int $daysLate = 10, array $overrides = []): Transaction
+{
+    $customer = Customer::firstOrCreate(
+        ['code' => 'PLG-700'],
+        ['name' => 'Budi', 'phone' => '081200000000', 'join_date' => '2026-01-01'],
+    );
+
+    return Transaction::create(array_merge([
+        'code' => 'GCG-DENDA-'.fake()->unique()->numerify('####'),
+        'customer_id' => $customer->id,
+        'device_owner' => 'Budi', 'device_name' => 'iPhone 13', 'kelengkapan' => 'HP saja',
+        'principal' => 1_000_000, 'tenor_days' => 15, 'fee_percent' => 10, 'fee' => 100_000,
+        'start_date' => now()->subDays($daysLate + 15)->toDateString(),
+        'due_date' => now()->subDays($daysLate)->toDateString(),
+        'status' => 'AKTIF', 'approval_status' => 'approved', 'clerk' => 'Rina',
+    ], $overrides));
+}
+
+test('no late fee is charged until the shop turns it on', function () {
+    dendaRule('off', 0);
+
+    expect(LateFee::amount(dendaTransaction()))->toBe(0);
+});
+
+test('the late fee follows the rule the shop chose', function (string $mode, float $value, int $expected) {
+    dendaRule($mode, $value);
+
+    expect(LateFee::amount(dendaTransaction(10)))->toBe($expected);
+})->with([
+    // 0.5% of a 1jt loan is 5.000 a day, over 10 days.
+    'persen dari dana titipan' => ['percent_principal', 0.5, 50_000],
+    // 1% of a 100rb fee is 1.000 a day.
+    'persen dari biaya titipan' => ['percent_fee', 1.0, 10_000],
+    'nominal tetap' => ['nominal', 5_000, 50_000],
+]);
+
+test('the grace period is forgiven before the late fee starts', function () {
+    dendaRule('percent_principal', 0.5, grace: 3);
+
+    // 10 days late, 3 forgiven, so 7 chargeable days at 5.000.
+    expect(LateFee::amount(dendaTransaction(10)))->toBe(35_000);
+});
+
+test('the late fee stops growing at the cap', function () {
+    dendaRule('nominal', 5_000, max: 5);
+
+    expect(LateFee::amount(dendaTransaction(30)))->toBe(25_000);
+});
+
+test('an item that is not overdue owes nothing', function () {
+    dendaRule('nominal', 5_000);
+    $tx = dendaTransaction(0, ['due_date' => now()->addDays(5)->toDateString()]);
+
+    expect(LateFee::amount($tx))->toBe(0);
+});
+
+test('an item that already left the shop stops accruing', function () {
+    dendaRule('nominal', 5_000);
+
+    expect(LateFee::amount(dendaTransaction(10, ['status' => 'DIAMBIL'])))->toBe(0)
+        ->and(LateFee::amount(dendaTransaction(10, ['status' => 'LELANG'])))->toBe(0);
+});
+
+test('redeeming an overdue item charges the late fee into the cash', function () {
+    dendaRule('nominal', 5_000);
+    $tx = dendaTransaction(10);
+
+    $this->actingAs(User::factory()->create())
+        ->post("/transaksi/{$tx->code}/tebus")
+        ->assertRedirect();
+
+    $tx->refresh();
+    $event = $tx->events()->where('type', 'redeemed')->first();
+
+    expect($tx->denda)->toBe(50_000)
+        // Dana titipan + biaya + denda all land in Kas Harian together.
+        ->and((int) $event->amount)->toBe(1_150_000);
+});
+
+test('waiving part of the late fee needs a reason', function () {
+    dendaRule('nominal', 5_000);
+    $tx = dendaTransaction(10);
+
+    $this->actingAs(User::factory()->create())
+        ->post("/transaksi/{$tx->code}/tebus", ['denda' => 0])
+        ->assertSessionHasErrors('reason');
+
+    expect($tx->refresh()->status)->toBe('AKTIF');
+});
+
+test('a waived late fee is recorded with its reason', function () {
+    dendaRule('nominal', 5_000);
+    $tx = dendaTransaction(10);
+
+    $this->actingAs(User::factory()->create())
+        ->post("/transaksi/{$tx->code}/tebus", [
+            'denda' => 20_000,
+            'reason' => 'Nego pelanggan',
+        ])->assertRedirect();
+
+    $tx->refresh();
+
+    expect($tx->denda)->toBe(20_000)
+        ->and((int) $tx->events()->where('type', 'redeemed')->first()->amount)->toBe(1_120_000);
+});
+
+test('a back-dated redemption is only charged up to that day', function () {
+    dendaRule('nominal', 5_000);
+    $tx = dendaTransaction(10);
+
+    // Collected 4 days ago, so only 6 late days are owed, not 10.
+    $this->actingAs(User::factory()->create())
+        ->post("/transaksi/{$tx->code}/tebus", ['date' => now()->subDays(4)->toDateString()])
+        ->assertRedirect();
+
+    expect($tx->refresh()->denda)->toBe(30_000);
+});
+
+test('the report keeps late-fee income apart from deposit-fee income', function () {
+    dendaRule('nominal', 5_000);
+    $tx = dendaTransaction(10);
+
+    $this->actingAs(User::factory()->create())
+        ->post("/transaksi/{$tx->code}/tebus")
+        ->assertRedirect();
+
+    $this->actingAs(User::factory()->owner()->create())
+        ->get('/laporan?from='.now()->startOfMonth()->toDateString().'&to='.now()->endOfMonth()->toDateString())
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('feeIncome.tebus', 100_000)
+            ->where('feeIncome.denda', 50_000)
+            ->where('feeIncome.total', 150_000),
+        );
+});
+
+test('the owner can change the whole late-fee rule', function () {
+    $this->actingAs(User::factory()->owner()->create())
+        ->put('/pengaturan/biaya', [
+            'denda_mode' => 'percent_principal',
+            'denda_value' => 0.75,
+            'denda_grace_days' => 2,
+            'denda_max_days' => 30,
+        ])->assertRedirect();
+
+    expect(LateFee::settings())->toBe([
+        'mode' => 'percent_principal',
+        'value' => 0.75,
+        'graceDays' => 2,
+        'maxDays' => 30,
+    ]);
+});
+
+test('an auction sale can be back-dated into the right day of cash', function () {
+    $tx = dendaTransaction(30, ['status' => 'LELANG']);
+    $when = now()->subDays(3)->toDateString();
+
+    $this->actingAs(User::factory()->create())
+        ->post("/transaksi/{$tx->code}/sale", ['sale_value' => 1_200_000, 'date' => $when])
+        ->assertRedirect();
+
+    $event = $tx->refresh()->events()->where('type', 'auctioned')->latest('id')->first();
+
+    expect($tx->sale_value)->toBe(1_200_000)
+        ->and($event->event_date->toDateString())->toBe($when)
+        ->and((int) $event->amount)->toBe(1_200_000);
+});

@@ -6,6 +6,7 @@ use App\Models\Setting;
 use App\Models\Store;
 use App\Models\Transaction;
 use App\Models\Wallet;
+use App\Support\LateFee;
 use Illuminate\Http\Request;
 use Inertia\Middleware;
 
@@ -53,6 +54,7 @@ class HandleInertiaRequests extends Middleware
                 ? $this->overdueCount($this->resolveActiveStoreId($request))
                 : 0,
             'approvalThreshold' => (int) Setting::get('approval_threshold', Transaction::APPROVAL_THRESHOLD),
+            'dendaRule' => LateFee::settings(),
             'wallets' => $request->user() ? $this->wallets() : [],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'serverDate' => now()->toDateString(),

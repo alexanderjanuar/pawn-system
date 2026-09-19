@@ -26,7 +26,7 @@ import {
     Wallet,
     X,
 } from 'lucide-react';
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { DatePicker } from '@/components/gadai/date-picker';
 import { ImageLightbox } from '@/components/gadai/image-lightbox';
@@ -94,6 +94,9 @@ export default function TransaksiShow({
     // Disbursement actions only apply once the loan is approved and still live.
     const running = approved && !STATUS_META[tx.status].terminal;
     const total = tx.principal + tx.fee;
+    // While overdue the penalty is still growing; once redeemed the amount
+    // actually charged is what matters.
+    const dendaShown = tx.status === 'DIAMBIL' ? tx.denda : tx.dendaDue;
     const d = daysUntil(tx.dueDate);
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [saleOpen, setSaleOpen] = useState(false);
@@ -155,7 +158,10 @@ export default function TransaksiShow({
         router.post(
             `/transaksi/${tx.id}/perpanjang/batal`,
             {},
-            { preserveScroll: true, onSuccess: () => setRevertExtendOpen(false) },
+            {
+                preserveScroll: true,
+                onSuccess: () => setRevertExtendOpen(false),
+            },
         );
 
     return (
@@ -449,10 +455,20 @@ export default function TransaksiShow({
                                     value={formatRupiah(tx.fee)}
                                     className="border-l"
                                     valueClass="text-primary"
+                                    hint={
+                                        dendaShown > 0
+                                            ? `+ denda ${formatRupiah(dendaShown)}`
+                                            : undefined
+                                    }
+                                    hintClass={
+                                        dendaShown > 0
+                                            ? 'text-overdue'
+                                            : undefined
+                                    }
                                 />
                                 <Figure
                                     label="Total Tebus"
-                                    value={formatRupiah(total)}
+                                    value={formatRupiah(total + dendaShown)}
                                     className="border-t sm:border-t-0 sm:border-l"
                                     emphasize
                                 />
@@ -1394,17 +1410,45 @@ function TebusDialog({ tx }: { tx: Transaction }) {
     // Redemption date — default today, can be back-dated so it lands in the
     // right day's Kas Harian (e.g. redeemed yesterday, entered today).
     const [date, setDate] = useState(today);
-    // Optional fee adjustment (e.g. redeemed early) — no separate edit needed.
+    // Optional adjustment of the fee or the late fee — no separate edit needed.
     const [adjust, setAdjust] = useState(false);
     const [fee, setFee] = useState(tx.fee);
     const [reason, setReason] = useState('');
 
+    // The late fee is owed up to the collection date, so back-dating reprices
+    // it exactly the way the server will when it saves.
+    const rule = usePage().props.dendaRule;
+    const dendaDue = useMemo(() => {
+        if (tx.dendaPerDay <= 0) {
+            return 0;
+        }
+
+        const late = Math.floor(
+            (new Date(`${date}T00:00:00`).getTime() -
+                new Date(`${tx.dueDate}T00:00:00`).getTime()) /
+                86_400_000,
+        );
+        let days = Math.max(0, late - rule.graceDays);
+
+        if (rule.maxDays > 0) {
+            days = Math.min(days, rule.maxDays);
+        }
+
+        return tx.dendaPerDay * days;
+    }, [date, tx.dueDate, tx.dendaPerDay, rule.graceDays, rule.maxDays]);
+
+    const [denda, setDenda] = useState(dendaDue);
+
     const effectiveFee = adjust ? Math.max(0, fee) : tx.fee;
+    const effectiveDenda = adjust ? Math.max(0, denda) : dendaDue;
     const pct =
         tx.principal > 0 ? Math.round((effectiveFee / tx.principal) * 100) : 0;
-    const total = tx.principal + effectiveFee;
-    // A reason is mandatory whenever the fee is adjusted (audit control).
-    const reasonNeeded = adjust && !reason.trim();
+    const total = tx.principal + effectiveFee + effectiveDenda;
+    // A reason is mandatory whenever a nominal is adjusted (audit control).
+    const reasonNeeded =
+        adjust &&
+        (effectiveFee !== tx.fee || effectiveDenda !== dendaDue) &&
+        !reason.trim();
 
     const reset = () => {
         setMethod('cash');
@@ -1412,6 +1456,7 @@ function TebusDialog({ tx }: { tx: Transaction }) {
         setDate(today);
         setAdjust(false);
         setFee(tx.fee);
+        setDenda(dendaDue);
         setReason('');
     };
 
@@ -1449,6 +1494,16 @@ function TebusDialog({ tx }: { tx: Transaction }) {
                         label={`Biaya titipan (${pct}%)`}
                         value={formatRupiah(effectiveFee)}
                     />
+                    {(effectiveDenda > 0 || dendaDue > 0) && (
+                        <Row
+                            label={`Denda keterlambatan${
+                                tx.dendaPerDay > 0 && effectiveDenda > 0
+                                    ? ` (${Math.round(effectiveDenda / tx.dendaPerDay)} hari)`
+                                    : ''
+                            }`}
+                            value={formatRupiah(effectiveDenda)}
+                        />
+                    )}
                     <div className="border-t pt-2">
                         <Row
                             label="Total tebus"
@@ -1460,7 +1515,11 @@ function TebusDialog({ tx }: { tx: Transaction }) {
 
                 <div className="grid gap-1.5">
                     <Label htmlFor="tebus-date">Tanggal tebus</Label>
-                    <DatePicker id="tebus-date" value={date} onChange={setDate} />
+                    <DatePicker
+                        id="tebus-date"
+                        value={date}
+                        onChange={setDate}
+                    />
                     {date !== today && (
                         <p className="text-xs text-muted-foreground">
                             Masuk ke Kas Harian tanggal{' '}
@@ -1475,16 +1534,25 @@ function TebusDialog({ tx }: { tx: Transaction }) {
                 <label className="flex cursor-pointer items-start gap-2.5 rounded-lg border p-3 text-sm has-[:checked]:border-primary/40 has-[:checked]:bg-primary/5">
                     <Checkbox
                         checked={adjust}
-                        onCheckedChange={(v) => setAdjust(v === true)}
+                        onCheckedChange={(v) => {
+                            setAdjust(v === true);
+
+                            if (v === true) {
+                                setFee(tx.fee);
+                                setDenda(dendaDue);
+                            }
+                        }}
                         className="mt-0.5"
                     />
                     <span>
                         <span className="font-medium">
                             Sesuaikan biaya titipan
+                            {dendaDue > 0 ? ' / denda' : ''}
                         </span>
                         <span className="block text-xs text-muted-foreground">
-                            Ubah biaya bila perlu (mis. ditebus lebih cepat),
-                            tanpa perlu edit transaksi.
+                            Ubah nominal bila perlu (mis. ditebus lebih cepat
+                            atau dendanya diringankan), tanpa perlu edit
+                            transaksi.
                         </span>
                     </span>
                 </label>
@@ -1492,7 +1560,9 @@ function TebusDialog({ tx }: { tx: Transaction }) {
                 {adjust && (
                     <div className="grid gap-3">
                         <div className="grid gap-1.5">
-                            <Label htmlFor="tebus-fee">Biaya titipan baru</Label>
+                            <Label htmlFor="tebus-fee">
+                                Biaya titipan baru
+                            </Label>
                             <div className="relative">
                                 <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
                                     Rp
@@ -1519,14 +1589,54 @@ function TebusDialog({ tx }: { tx: Transaction }) {
                                 />
                             </div>
                             <p className="text-xs text-muted-foreground">
-                                Biaya semula {formatRupiah(tx.fee)}. Total tebus
-                                jadi{' '}
-                                <span className="font-medium text-foreground">
-                                    {formatRupiah(total)}
-                                </span>
-                                .
+                                Biaya semula {formatRupiah(tx.fee)}.
                             </p>
                         </div>
+
+                        {dendaDue > 0 && (
+                            <div className="grid gap-1.5">
+                                <Label htmlFor="tebus-denda">Denda baru</Label>
+                                <div className="relative">
+                                    <span className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-sm text-muted-foreground">
+                                        Rp
+                                    </span>
+                                    <Input
+                                        id="tebus-denda"
+                                        inputMode="numeric"
+                                        value={
+                                            denda
+                                                ? denda.toLocaleString('id-ID')
+                                                : ''
+                                        }
+                                        onChange={(e) =>
+                                            setDenda(
+                                                parseInt(
+                                                    e.target.value.replace(
+                                                        /\D/g,
+                                                        '',
+                                                    ),
+                                                    10,
+                                                ) || 0,
+                                            )
+                                        }
+                                        placeholder="0"
+                                        className="pl-9 tabular-nums"
+                                    />
+                                </div>
+                                <p className="text-xs text-muted-foreground">
+                                    Denda semula {formatRupiah(dendaDue)}. Isi 0
+                                    untuk membebaskan denda.
+                                </p>
+                            </div>
+                        )}
+
+                        <p className="text-xs text-muted-foreground">
+                            Total tebus jadi{' '}
+                            <span className="font-medium text-foreground">
+                                {formatRupiah(total)}
+                            </span>
+                            .
+                        </p>
 
                         <div className="grid gap-1.5">
                             <Label htmlFor="tebus-reason">
@@ -1589,6 +1699,7 @@ function TebusDialog({ tx }: { tx: Transaction }) {
                                     ...(adjust
                                         ? {
                                               fee: effectiveFee,
+                                              denda: effectiveDenda,
                                               reason: reason.trim(),
                                           }
                                         : {}),
@@ -1660,9 +1771,13 @@ function RecordSaleDialog({
     onOpenChange: (value: boolean) => void;
 }) {
     const wallets = useWallets();
+    const today = usePage().props.serverDate;
     const { data, setData, post, processing, errors, reset } = useForm({
         sale_value: 0,
         wallet_id: defaultWalletId(wallets),
+        // Sales are often entered days later; the money belongs to the day it
+        // actually came in, not the day it was typed.
+        date: today,
     });
 
     const net = (data.sale_value || 0) - tx.principal;
@@ -1700,6 +1815,23 @@ function RecordSaleDialog({
                         </DialogDescription>
                     </DialogHeader>
                     <div className="grid gap-3 py-4">
+                        <div className="grid gap-1.5">
+                            <Label htmlFor="sale-date">Tanggal terjual</Label>
+                            <DatePicker
+                                id="sale-date"
+                                value={data.date}
+                                onChange={(v) => setData('date', v)}
+                            />
+                            {data.date !== today && (
+                                <p className="text-xs text-muted-foreground">
+                                    Masuk ke Kas Harian tanggal{' '}
+                                    <span className="font-medium text-foreground">
+                                        {formatDate(data.date)}
+                                    </span>{' '}
+                                    (bukan hari ini).
+                                </p>
+                            )}
+                        </div>
                         <div className="grid gap-1.5">
                             <Label htmlFor="sale-value">Nilai Jual</Label>
                             <div className="relative">

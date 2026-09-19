@@ -16,6 +16,7 @@ use App\Models\Transaction;
 use App\Models\Wallet;
 use App\Services\Fonnte;
 use App\Support\ActiveStore;
+use App\Support\LateFee;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
@@ -391,7 +392,9 @@ class GadaiController extends Controller
             'wallet_id' => ['nullable', 'integer', 'exists:wallets,id'],
             // Optional adjusted deposit fee (e.g. redeemed early) — no separate edit needed.
             'fee' => ['nullable', 'integer', 'min:0'],
-            // Audit: a reason is mandatory whenever the fee is adjusted.
+            // Optional adjusted late fee, for when the shop waives part of it.
+            'denda' => ['nullable', 'integer', 'min:0'],
+            // Audit: a reason is mandatory whenever a nominal is adjusted.
             'reason' => ['nullable', 'string', 'max:200'],
             // Optional redemption date (default today) — lands in Kas on that day.
             'date' => [
@@ -407,8 +410,16 @@ class GadaiController extends Controller
         $adjusted = array_key_exists('fee', $data) && $data['fee'] !== null
             && (int) $data['fee'] !== (int) $transaction->fee;
 
-        if ($adjusted && blank($data['reason'] ?? null)) {
-            return back()->withErrors(['reason' => 'Alasan penyesuaian biaya wajib diisi.']);
+        // The late fee is owed up to the day the item is actually collected, so
+        // a back-dated redemption is not charged for days the shop did not wait.
+        $dendaDue = LateFee::amount($transaction, Carbon::parse($redeemDate));
+        $denda = array_key_exists('denda', $data) && $data['denda'] !== null
+            ? (int) $data['denda']
+            : $dendaDue;
+        $dendaAdjusted = $denda !== $dendaDue;
+
+        if (($adjusted || $dendaAdjusted) && blank($data['reason'] ?? null)) {
+            return back()->withErrors(['reason' => 'Alasan penyesuaian nominal wajib diisi.']);
         }
 
         $fee = $adjusted ? (int) $data['fee'] : (int) $transaction->fee;
@@ -422,29 +433,52 @@ class GadaiController extends Controller
             'status' => 'DIAMBIL',
             'fee' => $fee,
             'fee_percent' => $percent,
+            'denda' => $denda,
         ]);
+
+        $notes = [];
+
+        if ($adjusted) {
+            $notes[] = 'Biaya titipan disesuaikan menjadi '.$this->rupiah($fee).'.';
+        }
+
+        if ($dendaAdjusted) {
+            $notes[] = 'Denda disesuaikan dari '.$this->rupiah($dendaDue).' menjadi '.$this->rupiah($denda).'.';
+        } elseif ($denda > 0) {
+            $notes[] = 'Termasuk denda keterlambatan '.$this->rupiah($denda).'.';
+        }
+
+        if ($notes !== [] && ($adjusted || $dendaAdjusted)) {
+            $notes[] = 'Alasan: '.$reason.'.';
+        }
 
         $transaction->events()->create([
             'type' => 'redeemed',
             'event_date' => $redeemDate,
             'title' => 'Ditebus & diambil',
-            'note' => $adjusted
-                ? 'Biaya titipan disesuaikan menjadi '.$this->rupiah($fee).'. Alasan: '.$reason.'.'
-                : null,
+            'note' => $notes === [] ? null : implode(' ', $notes),
             'by' => $request->user()?->name,
-            'amount' => $transaction->principal + $fee,
+            'amount' => $transaction->principal + $fee + $denda,
             'payment_method' => $data['payment_method'] ?? 'cash',
             'wallet_id' => $this->resolveWallet($data['wallet_id'] ?? null),
         ]);
 
-        $overLimit = $adjusted && $this->exceedsDiscountLimit($feeBefore, $fee);
+        $overLimit = ($adjusted && $this->exceedsDiscountLimit($feeBefore, $fee))
+            || ($dendaAdjusted && $this->exceedsDiscountLimit($dendaDue, $denda));
+
+        $what = match (true) {
+            $adjusted && $dendaAdjusted => 'biaya & denda disesuaikan',
+            $adjusted => 'biaya disesuaikan',
+            $dendaAdjusted => 'denda disesuaikan',
+            default => null,
+        };
 
         ActivityLog::record(
             'updated',
             'transaction',
             $transaction->code,
             $transaction->customer->name,
-            'Menebus & mengambil barang'.($adjusted ? " (biaya disesuaikan: {$reason})" : ''),
+            'Menebus & mengambil barang'.($what ? " ({$what}: {$reason})" : ''),
             null,
             $overLimit,
         );
@@ -834,16 +868,25 @@ class GadaiController extends Controller
         $data = $request->validate([
             'sale_value' => ['required', 'integer', 'min:0'],
             'wallet_id' => ['nullable', 'integer', 'exists:wallets,id'],
+            // Optional sale date (default today) so a sale entered late still
+            // lands in the Kas Harian of the day the money actually came in.
+            'date' => [
+                'nullable', 'date',
+                'after_or_equal:'.$transaction->start_date->toDateString(),
+                'before_or_equal:today',
+            ],
         ]);
+
+        $saleDate = ! empty($data['date']) ? $data['date'] : now()->toDateString();
 
         $transaction->update([
             'sale_value' => $data['sale_value'],
-            'sold_at' => now(),
+            'sold_at' => $saleDate,
         ]);
 
         $transaction->events()->create([
             'type' => 'auctioned',
-            'event_date' => now(),
+            'event_date' => $saleDate,
             'title' => 'Terjual lelang',
             'by' => $request->user()?->name,
             'amount' => $data['sale_value'],

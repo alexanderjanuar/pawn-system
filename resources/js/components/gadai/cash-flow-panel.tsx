@@ -1,10 +1,5 @@
 import { Link, router } from '@inertiajs/react';
-import {
-    ArrowLeftRight,
-    Banknote,
-    Landmark,
-    Trash2,
-} from 'lucide-react';
+import { ArrowLeftRight, Banknote, Landmark, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { PetugasLink } from '@/components/petugas-link';
 import { TablePagination } from '@/components/table-pagination';
@@ -31,11 +26,7 @@ import { formatDate, formatRupiah } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 export type CashKind =
-    | 'tebus'
-    | 'perpanjang'
-    | 'lelang'
-    | 'pencairan'
-    | 'manual';
+    'tebus' | 'perpanjang' | 'lelang' | 'pencairan' | 'manual';
 export type PaymentMethod = 'cash' | 'transfer';
 export type CashEntry = {
     id: number;
@@ -65,14 +56,17 @@ export type CashFlow = {
     };
     out: { pencairan: number; manual: number; total: number };
     net: number;
-    byWallet: Record<number, { id: number; in: number; out: number; net: number }>;
+    byWallet: Record<
+        number,
+        { id: number; in: number; out: number; net: number }
+    >;
     entries: CashEntry[];
 };
 
 const CASH_KIND_LABEL: Record<CashKind, string> = {
     tebus: 'Tebus',
     perpanjang: 'Perpanjang',
-    lelang: 'Lelang',
+    lelang: 'Jual Barang',
     pencairan: 'Pencairan',
     manual: 'Manual',
 };
@@ -124,7 +118,7 @@ export function CashFlowPanel({
                     </span>
                     <span className="text-xs text-muted-foreground">
                         Tebus {formatRupiah(cashFlow.in.tebus)} · Perpanjang{' '}
-                        {formatRupiah(cashFlow.in.perpanjang)} · Lelang{' '}
+                        {formatRupiah(cashFlow.in.perpanjang)} · Jual Barang{' '}
                         {formatRupiah(cashFlow.in.lelang)}
                         {cashFlow.in.manual > 0 && (
                             <> · Manual {formatRupiah(cashFlow.in.manual)}</>
@@ -339,8 +333,8 @@ export function CashFlowPanel({
                                     colSpan={8}
                                     className="px-5 py-10 text-center text-muted-foreground"
                                 >
-                                    Belum ada uang masuk atau keluar pada periode
-                                    ini.
+                                    Belum ada uang masuk atau keluar pada
+                                    periode ini.
                                 </td>
                             </tr>
                         )}

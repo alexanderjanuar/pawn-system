@@ -92,7 +92,9 @@ export default function TransaksiShow({
     const rejected = tx.approvalStatus === 'rejected';
     const approved = tx.approvalStatus === 'approved';
     // Disbursement actions only apply once the loan is approved and still live.
-    const running = approved && !STATUS_META[tx.status].terminal;
+    // A forfeited item that the shop already sold has left the shop too.
+    const sold = tx.soldAt != null;
+    const running = approved && !STATUS_META[tx.status].terminal && !sold;
     const total = tx.principal + tx.fee;
     // While overdue the penalty is still growing; once redeemed the amount
     // actually charged is what matters.
@@ -412,7 +414,7 @@ export default function TransaksiShow({
                                 <p className="text-muted-foreground">
                                     {dueLabel(tx.dueDate)}.{' '}
                                     {notRedeemed
-                                        ? 'Lanjutkan ke lelang bila barang tidak akan ditebus.'
+                                        ? 'Catat penjualannya bila barang dijual toko, atau lanjutkan ke lelang.'
                                         : 'Tentukan langkah selanjutnya: tandai barang tidak diambil, atau lanjut ke lelang.'}
                                 </p>
                                 <div className="mt-3 flex flex-wrap gap-2">
@@ -428,8 +430,20 @@ export default function TransaksiShow({
                                             Tandai Tidak Diambil
                                         </Button>
                                     )}
+                                    {notRedeemed && (
+                                        <Button
+                                            size="sm"
+                                            onClick={() => setSaleOpen(true)}
+                                        >
+                                            <Coins />
+                                            Catat Penjualan
+                                        </Button>
+                                    )}
                                     <Button
                                         size="sm"
+                                        variant={
+                                            notRedeemed ? 'outline' : 'default'
+                                        }
                                         onClick={() => setLelangOpen(true)}
                                     >
                                         <Gavel />
@@ -497,16 +511,18 @@ export default function TransaksiShow({
                         </div>
 
                         {/* Lelang */}
-                        {lelang && (
+                        {(lelang || (notRedeemed && sold)) && (
                             <section className="rounded-xl border border-lelang/30 bg-lelang-soft/30 p-5 shadow-sm sm:p-6">
                                 <div className="mb-4 flex items-center justify-between gap-3">
                                     <div className="flex items-center gap-2">
                                         <Gavel className="size-4.5 text-lelang" />
                                         <h2 className="font-semibold">
-                                            Barang Lelang
+                                            {lelang
+                                                ? 'Barang Lelang'
+                                                : 'Barang Tidak Diambil · Terjual'}
                                         </h2>
                                     </div>
-                                    {tx.saleValue == null && (
+                                    {lelang && tx.saleValue == null && (
                                         <div className="flex items-center gap-2">
                                             <Button
                                                 variant="outline"
@@ -1813,7 +1829,11 @@ function RecordSaleDialog({
             <DialogContent>
                 <form onSubmit={submit}>
                     <DialogHeader>
-                        <DialogTitle>Catat Penjualan Lelang</DialogTitle>
+                        <DialogTitle>
+                            {tx.status === 'LELANG'
+                                ? 'Catat Penjualan Lelang'
+                                : 'Catat Penjualan Barang'}
+                        </DialogTitle>
                         <DialogDescription>
                             Masukkan harga jual {tx.device.name}. Untung/rugi
                             dihitung dari nilai pinjaman{' '}

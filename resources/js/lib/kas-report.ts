@@ -4,7 +4,7 @@ import { formatRupiah } from '@/lib/format';
 const KIND_LABEL: Record<CashKind, string> = {
     tebus: 'Tebus',
     perpanjang: 'Perpanjang',
-    lelang: 'Lelang',
+    lelang: 'Jual Barang',
     pencairan: 'Pencairan',
     manual: 'Manual',
 };

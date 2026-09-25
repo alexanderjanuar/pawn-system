@@ -6,6 +6,7 @@ use App\Http\Resources\ActivityResource;
 use App\Http\Resources\TransactionResource;
 use App\Models\ActivityLog;
 use App\Models\Transaction;
+use App\Models\TransactionEvent;
 use App\Support\ActiveStore;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -48,6 +49,27 @@ class DashboardController extends Controller
                 (clone $review)->latest()->limit(8)->get(),
             ),
             'reviewCount' => $review->count(),
+            'monthIncome' => $this->monthIncome(),
         ]);
+    }
+
+    /**
+     * Income earned in the running month: extension fees, plus what a
+     * redemption paid on top of the loan (deposit fee and any late fee).
+     * Same definition as the Laporan page's total, scoped to this month, so
+     * the two screens never disagree.
+     */
+    private function monthIncome(): int
+    {
+        return (int) TransactionEvent::query()
+            ->with('transaction:id,principal')
+            ->whereHas('transaction', fn ($query) => $query->forActiveStore())
+            ->whereIn('type', ['extended', 'redeemed'])
+            ->whereDate('event_date', '>=', now()->startOfMonth()->toDateString())
+            ->whereDate('event_date', '<=', now()->endOfMonth()->toDateString())
+            ->get()
+            ->sum(fn (TransactionEvent $event): int => $event->type === 'redeemed'
+                ? max(0, (int) $event->amount - (int) ($event->transaction?->principal ?? 0))
+                : (int) $event->amount);
     }
 }

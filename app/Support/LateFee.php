@@ -128,7 +128,7 @@ class LateFee
      */
     public static function amount(Transaction $transaction, ?CarbonInterface $on = null): int
     {
-        if (! in_array($transaction->status, self::ACCRUING, true)) {
+        if (! in_array($transaction->status, self::ACCRUING, true) || $transaction->sold_at !== null) {
             return 0;
         }
 

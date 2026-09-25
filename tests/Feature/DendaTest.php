@@ -360,3 +360,63 @@ test('exempting an item clears its rate and limits', function () {
         ->and($tx->denda_grace_days)->toBeNull()
         ->and($tx->denda_max_days)->toBeNull();
 });
+
+test('a forfeited item can be sold and the money lands in Kas Harian', function () {
+    $tx = dendaTransaction(20, ['status' => 'TIDAK_DIAMBIL']);
+    $today = now()->toDateString();
+
+    $this->actingAs(User::factory()->create())
+        ->post("/transaksi/{$tx->code}/sale", ['sale_value' => 1_300_000])
+        ->assertRedirect()
+        ->assertSessionHas('success');
+
+    $tx->refresh();
+    $event = $tx->events()->where('type', 'auctioned')->latest('id')->first();
+
+    expect($tx->sale_value)->toBe(1_300_000)
+        ->and($tx->sold_at)->not->toBeNull()
+        ->and($event->title)->toBe('Terjual (barang tidak diambil)');
+
+    $this->actingAs(User::factory()->owner()->create())
+        ->get("/kas?from={$today}&to={$today}")
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('cashFlow.in.lelang', 1_300_000),
+        );
+});
+
+test('a sold item can no longer be redeemed, extended or re-flagged', function () {
+    $tx = dendaTransaction(20, ['status' => 'TIDAK_DIAMBIL']);
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->post("/transaksi/{$tx->code}/sale", ['sale_value' => 900_000]);
+
+    $this->actingAs($user)->post("/transaksi/{$tx->code}/tebus")->assertSessionHas('error');
+    $this->actingAs($user)->post("/transaksi/{$tx->code}/perpanjang", ['mode' => '15', 'fee_paid' => 1])
+        ->assertSessionHas('error');
+    $this->actingAs($user)->post("/transaksi/{$tx->code}/lelang")->assertSessionHas('error');
+
+    expect($tx->refresh()->status)->toBe('TIDAK_DIAMBIL');
+});
+
+test('a sale cannot be recorded twice', function () {
+    $tx = dendaTransaction(20, ['status' => 'TIDAK_DIAMBIL']);
+    $user = User::factory()->create();
+
+    $this->actingAs($user)->post("/transaksi/{$tx->code}/sale", ['sale_value' => 900_000]);
+    $this->actingAs($user)
+        ->post("/transaksi/{$tx->code}/sale", ['sale_value' => 500_000])
+        ->assertSessionHas('error');
+
+    expect($tx->refresh()->sale_value)->toBe(900_000)
+        ->and($tx->events()->where('type', 'auctioned')->count())->toBe(1);
+});
+
+test('a sold item stops accruing a late fee', function () {
+    dendaRule('nominal', 5_000);
+    $tx = dendaTransaction(20, ['status' => 'TIDAK_DIAMBIL']);
+
+    $this->actingAs(User::factory()->create())
+        ->post("/transaksi/{$tx->code}/sale", ['sale_value' => 900_000]);
+
+    expect(LateFee::amount($tx->refresh()))->toBe(0);
+});

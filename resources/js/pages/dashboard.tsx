@@ -143,11 +143,14 @@ export default function Dashboard({
     pendingApprovals,
     reviewQueue,
     reviewCount,
+    monthIncome,
 }: {
     transactions: Transaction[];
     pendingApprovals: Transaction[];
     reviewQueue: Activity[];
     reviewCount: number;
+    /** Income earned in the running month, computed by the server. */
+    monthIncome: number;
 }) {
     const page = usePage().props;
     const role = page.auth.user?.role;
@@ -164,26 +167,19 @@ export default function Dashboard({
         const runningPrincipal = running.reduce((s, t) => s + t.principal, 0);
         const runningFee = running.reduce((s, t) => s + t.fee, 0);
 
-        const feeIncome =
-            book
-                .filter((t) => t.status === 'DIAMBIL')
-                .reduce((s, t) => s + t.fee, 0) +
-            book
-                .flatMap((t) => t.history)
-                .filter((e) => e.type === 'extended')
-                .reduce((s, e) => s + (e.amount ?? 0), 0);
-
         const counts = countByStatus(book);
 
-        const attention =
-            counts.TIDAK_DIAMBIL +
-            running.filter((t) => daysUntil(t.dueDate) <= 0).length;
+        // Only pawns still awaiting a decision need attention. "Tidak Diambil"
+        // is a decision already taken, the same rule the Jatuh Tempo page and
+        // the sidebar badge follow.
+        const attention = running.filter(
+            (t) => daysUntil(t.dueDate) <= 0,
+        ).length;
 
         // Due soon + overdue, sorted by due date ascending
-        const dueList = [
-            ...book.filter((t) => t.status === 'TIDAK_DIAMBIL'),
-            ...running.filter((t) => daysUntil(t.dueDate) <= 7),
-        ].sort((a, b) => a.dueDate.localeCompare(b.dueDate));
+        const dueList = running
+            .filter((t) => daysUntil(t.dueDate) <= 7)
+            .sort((a, b) => a.dueDate.localeCompare(b.dueDate));
 
         const activity = transactions
             .flatMap((t) =>
@@ -200,7 +196,6 @@ export default function Dashboard({
             running,
             runningPrincipal,
             potensiTebus: runningPrincipal + runningFee,
-            feeIncome,
             counts,
             total: book.length,
             attention,
@@ -210,6 +205,14 @@ export default function Dashboard({
         };
     }, [transactions]);
 
+    // The running month, named from the server's date so the label and the
+    // figure beside it always describe the same period.
+    const serverDate = usePage().props.serverDate;
+    const monthName = new Date(`${serverDate}T00:00:00`).toLocaleDateString(
+        'id-ID',
+        { month: 'long' },
+    );
+
     const stats = [
         {
             label: 'Dana Titipan Berjalan',
@@ -217,9 +220,9 @@ export default function Dashboard({
             hint: `${data.running.length} barang aktif berjalan`,
         },
         {
-            label: 'Pemasukan Biaya · Juli',
-            value: formatRupiah(data.feeIncome),
-            hint: 'biaya titipan + perpanjangan',
+            label: `Pemasukan Biaya · ${monthName}`,
+            value: formatRupiah(monthIncome),
+            hint: 'bulan ini · biaya titipan, perpanjangan & denda',
         },
         {
             label: 'Potensi Tebus',

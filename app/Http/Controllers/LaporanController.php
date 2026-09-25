@@ -92,7 +92,7 @@ class LaporanController extends Controller
             'in' => $cashFlow['in'],
             'out' => $cashFlow['out'],
             'net' => $cashFlow['net'],
-            'kindLabels' => ['tebus' => 'Tebus', 'perpanjang' => 'Perpanjang', 'lelang' => 'Lelang', 'pencairan' => 'Pencairan', 'manual' => 'Manual'],
+            'kindLabels' => ['tebus' => 'Tebus', 'perpanjang' => 'Perpanjang', 'lelang' => 'Jual Barang', 'pencairan' => 'Pencairan', 'manual' => 'Manual'],
             'methodLabels' => ['cash' => 'Tunai', 'transfer' => 'Transfer'],
         ])->render();
 

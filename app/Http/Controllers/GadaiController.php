@@ -385,7 +385,8 @@ class GadaiController extends Controller
 
     public function redeem(Request $request, Transaction $transaction): RedirectResponse
     {
-        if (! in_array($transaction->status, ['AKTIF', 'PERPANJANG', 'TIDAK_DIAMBIL'], true)) {
+        if (! in_array($transaction->status, ['AKTIF', 'PERPANJANG', 'TIDAK_DIAMBIL'], true)
+            || $transaction->sold_at !== null) {
             return back()->with('error', 'Transaksi ini tidak bisa ditebus.');
         }
 
@@ -490,7 +491,8 @@ class GadaiController extends Controller
 
     public function extend(Request $request, Transaction $transaction): RedirectResponse
     {
-        if (! in_array($transaction->status, ['AKTIF', 'PERPANJANG', 'TIDAK_DIAMBIL'], true)) {
+        if (! in_array($transaction->status, ['AKTIF', 'PERPANJANG', 'TIDAK_DIAMBIL'], true)
+            || $transaction->sold_at !== null) {
             return back()->with('error', 'Transaksi ini tidak bisa diperpanjang.');
         }
 
@@ -805,7 +807,7 @@ class GadaiController extends Controller
 
     public function lelang(Request $request, Transaction $transaction): RedirectResponse
     {
-        if (in_array($transaction->status, ['DIAMBIL', 'LELANG'], true)) {
+        if (in_array($transaction->status, ['DIAMBIL', 'LELANG'], true) || $transaction->sold_at !== null) {
             return back()->with('error', 'Transaksi ini tidak bisa ditandai lelang.');
         }
 
@@ -863,9 +865,17 @@ class GadaiController extends Controller
 
     public function recordSale(Request $request, Transaction $transaction): RedirectResponse
     {
-        if ($transaction->status !== 'LELANG') {
-            return back()->with('error', 'Hanya barang lelang yang bisa dicatat penjualannya.');
+        // Both an auctioned item and one the customer never came back for are
+        // the shop's to sell; the money is what lands in Kas Harian.
+        if (! in_array($transaction->status, ['LELANG', 'TIDAK_DIAMBIL'], true)) {
+            return back()->with('error', 'Hanya barang lelang atau tidak diambil yang bisa dicatat penjualannya.');
         }
+
+        if ($transaction->sold_at !== null) {
+            return back()->with('error', 'Penjualan barang ini sudah dicatat.');
+        }
+
+        $forfeited = $transaction->status === 'TIDAK_DIAMBIL';
 
         $data = $request->validate([
             'sale_value' => ['required', 'integer', 'min:0'],
@@ -889,7 +899,7 @@ class GadaiController extends Controller
         $transaction->events()->create([
             'type' => 'auctioned',
             'event_date' => $saleDate,
-            'title' => 'Terjual lelang',
+            'title' => $forfeited ? 'Terjual (barang tidak diambil)' : 'Terjual lelang',
             'by' => $request->user()?->name,
             'amount' => $data['sale_value'],
             'payment_method' => 'cash',
@@ -901,7 +911,8 @@ class GadaiController extends Controller
             'transaction',
             $transaction->code,
             $transaction->customer->name,
-            'Mencatat penjualan lelang: '.$this->rupiah($data['sale_value']),
+            ($forfeited ? 'Mencatat penjualan barang tidak diambil: ' : 'Mencatat penjualan lelang: ')
+                .$this->rupiah($data['sale_value']),
         );
 
         return back()->with('success', "Penjualan {$transaction->code} dicatat.");

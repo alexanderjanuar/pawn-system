@@ -26,7 +26,7 @@ import { formatDate, formatRupiah } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
 export type CashKind =
-    'tebus' | 'perpanjang' | 'lelang' | 'pencairan' | 'manual';
+    'tebus' | 'perpanjang' | 'lelang' | 'pencairan' | 'operasional' | 'manual';
 export type PaymentMethod = 'cash' | 'transfer';
 export type CashEntry = {
     id: number;
@@ -54,7 +54,12 @@ export type CashFlow = {
         unset: number;
         total: number;
     };
-    out: { pencairan: number; manual: number; total: number };
+    out: {
+        pencairan: number;
+        operasional: number;
+        manual: number;
+        total: number;
+    };
     net: number;
     byWallet: Record<
         number,
@@ -68,6 +73,7 @@ const CASH_KIND_LABEL: Record<CashKind, string> = {
     perpanjang: 'Perpanjang',
     lelang: 'Jual Barang',
     pencairan: 'Pencairan',
+    operasional: 'Biaya Operasional',
     manual: 'Manual',
 };
 
@@ -134,6 +140,13 @@ export function CashFlowPanel({
                     </span>
                     <span className="text-xs text-muted-foreground">
                         Pencairan {formatRupiah(cashFlow.out.pencairan)}
+                        {cashFlow.out.operasional > 0 && (
+                            <>
+                                {' '}
+                                · Biaya Operasional{' '}
+                                {formatRupiah(cashFlow.out.operasional)}
+                            </>
+                        )}
                         {cashFlow.out.manual > 0 && (
                             <> · Manual {formatRupiah(cashFlow.out.manual)}</>
                         )}
@@ -318,7 +331,11 @@ export function CashFlowPanel({
                                                     onClick={() =>
                                                         setPendingDelete(e)
                                                     }
-                                                    title="Hapus kas manual"
+                                                    title={
+                                                        e.kind === 'operasional'
+                                                            ? 'Hapus biaya operasional'
+                                                            : 'Hapus kas manual'
+                                                    }
                                                 >
                                                     <Trash2 className="size-4" />
                                                 </Button>
@@ -391,7 +408,9 @@ export function CashFlowPanel({
                                 }
 
                                 router.delete(
-                                    `/kas/manual/${pendingDelete.id}`,
+                                    pendingDelete.kind === 'operasional'
+                                        ? `/biaya-operasional/${pendingDelete.id}`
+                                        : `/kas/manual/${pendingDelete.id}`,
                                     {
                                         preserveScroll: true,
                                         onFinish: () => setPendingDelete(null),

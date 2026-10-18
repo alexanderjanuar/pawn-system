@@ -24,6 +24,7 @@ class LaporanController extends Controller
     public function index(Request $request): Response
     {
         [$from, $to] = $this->period($request);
+        $feeIncome = $this->feeIncome($from, $to);
 
         return Inertia::render('laporan', [
             'transactions' => TransactionResource::collection(
@@ -33,7 +34,8 @@ class LaporanController extends Controller
             'trend' => $this->feeTrend(),
             'dailyTrend' => $this->dailyTrend(),
             'overview' => $this->overview(),
-            'feeIncome' => $this->feeIncome($from, $to),
+            'feeIncome' => $feeIncome,
+            'profit' => $this->profit($from, $to, $feeIncome['total']),
         ]);
     }
 
@@ -92,7 +94,7 @@ class LaporanController extends Controller
             'in' => $cashFlow['in'],
             'out' => $cashFlow['out'],
             'net' => $cashFlow['net'],
-            'kindLabels' => ['tebus' => 'Tebus', 'perpanjang' => 'Perpanjang', 'lelang' => 'Jual Barang', 'pencairan' => 'Pencairan', 'manual' => 'Manual'],
+            'kindLabels' => ['tebus' => 'Tebus', 'perpanjang' => 'Perpanjang', 'lelang' => 'Jual Barang', 'pencairan' => 'Pencairan', 'operasional' => 'Biaya Operasional', 'manual' => 'Manual'],
             'methodLabels' => ['cash' => 'Tunai', 'transfer' => 'Transfer'],
         ])->render();
 
@@ -496,6 +498,43 @@ class LaporanController extends Controller
      *
      * @return Builder<TransactionEvent>
      */
+    /**
+     * Net profit for the period: what the shop earned (deposit fees, late
+     * fees), plus or minus what it made selling forfeited items over their
+     * loan, minus what it cost to run the shop.
+     *
+     * @return array{pendapatan: int, selisihJual: int, terjual: int, biayaOperasional: int, labaBersih: int}
+     */
+    private function profit(string $from, string $to, int $pendapatan): array
+    {
+        $storeId = app(ActiveStore::class)->id();
+
+        $biaya = (int) CashEntry::query()
+            ->expense()
+            ->when($storeId !== null, fn ($q) => $q->where('store_id', $storeId))
+            ->when($from !== '', fn ($q) => $q->whereDate('entry_date', '>=', $from))
+            ->when($to !== '', fn ($q) => $q->whereDate('entry_date', '<=', $to))
+            ->sum('amount');
+
+        $sold = Transaction::query()
+            ->forActiveStore()
+            ->whereNotNull('sold_at')
+            ->whereNotNull('sale_value')
+            ->when($from !== '', fn ($q) => $q->whereDate('sold_at', '>=', $from))
+            ->when($to !== '', fn ($q) => $q->whereDate('sold_at', '<=', $to))
+            ->get(['principal', 'sale_value']);
+
+        $selisih = (int) $sold->sum(fn (Transaction $t): int => (int) $t->sale_value - (int) $t->principal);
+
+        return [
+            'pendapatan' => $pendapatan,
+            'selisihJual' => $selisih,
+            'terjual' => $sold->count(),
+            'biayaOperasional' => $biaya,
+            'labaBersih' => $pendapatan + $selisih - $biaya,
+        ];
+    }
+
     private function feeIncomeEvents(): Builder
     {
         return TransactionEvent::query()
@@ -695,7 +734,7 @@ class LaporanController extends Controller
             ->get();
 
         $in = ['tebus' => 0, 'perpanjang' => 0, 'lelang' => 0, 'manual' => 0, 'cash' => 0, 'transfer' => 0, 'unset' => 0, 'total' => 0];
-        $out = ['pencairan' => 0, 'manual' => 0, 'total' => 0];
+        $out = ['pencairan' => 0, 'operasional' => 0, 'manual' => 0, 'total' => 0];
         $byWallet = [];
         $entries = [];
 
@@ -792,10 +831,13 @@ class LaporanController extends Controller
         foreach ($manual as $entry) {
             $amount = (int) $entry->amount;
 
+            // A categorised cash-out is a shop operating cost, shown on its own line.
+            $kind = $entry->isExpense() ? 'operasional' : 'manual';
+
             if ($entry->direction === 'in') {
                 $addIn($amount, $entry->method, 'manual');
             } else {
-                $out['manual'] += $amount;
+                $out[$kind] += $amount;
                 $out['total'] += $amount;
             }
 
@@ -807,7 +849,7 @@ class LaporanController extends Controller
                 'source' => 'manual',
                 'code' => null,
                 'customer' => $entry->description,
-                'kind' => 'manual',
+                'kind' => $kind,
                 'direction' => $entry->direction,
                 'amount' => $amount,
                 'method' => $entry->method,
@@ -869,6 +911,10 @@ class LaporanController extends Controller
         $storeId = app(ActiveStore::class)->id();
 
         abort_unless($cashEntry->store_id === $storeId, 403);
+
+        if ($cashEntry->isExpense()) {
+            return back()->with('error', 'Biaya operasional dihapus dari halaman Biaya Operasional agar tercatat di riwayat.');
+        }
 
         $cashEntry->delete();
 

@@ -9,6 +9,7 @@ import {
     LayoutDashboard,
     PlusCircle,
     Receipt,
+    ReceiptText,
     ScrollText,
     Store,
     UserCog,
@@ -58,6 +59,11 @@ export function AppSidebar() {
     const operationalNavItems: NavItem[] = [
         { title: 'Transaksi', href: '/transaksi', icon: Receipt },
         { title: 'Kas Harian', href: '/kas', icon: Wallet },
+        {
+            title: 'Biaya Operasional',
+            href: '/biaya-operasional',
+            icon: ReceiptText,
+        },
         { title: 'Pelanggan', href: '/pelanggan', icon: Users },
         { title: 'Piutang', href: '/piutang', icon: HandCoins },
         { title: 'Rak', href: '/rak', icon: Boxes },

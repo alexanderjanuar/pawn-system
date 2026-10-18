@@ -117,7 +117,9 @@ export type Activity = {
         | 'user'
         | 'store'
         | 'rak'
-        | 'piutang';
+        | 'piutang'
+        | 'dompet'
+        | 'biaya';
     subjectCode: string | null;
     subjectLabel: string | null;
     description: string;

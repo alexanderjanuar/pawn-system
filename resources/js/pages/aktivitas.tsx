@@ -43,6 +43,8 @@ const SUBJECT_NOUN: Record<Activity['subjectType'], string> = {
     store: 'Toko',
     rak: 'Rak',
     piutang: 'Piutang',
+    dompet: 'Dompet',
+    biaya: 'Biaya Operasional',
 };
 
 /** Sentinel for "no filter" — Radix Select cannot hold an empty string value. */

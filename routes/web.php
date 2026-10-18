@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\AktivitasController;
+use App\Http\Controllers\BiayaOperasionalController;
 use App\Http\Controllers\CekStatusController;
 use App\Http\Controllers\ClientErrorController;
 use App\Http\Controllers\DashboardController;
@@ -45,6 +46,12 @@ Route::middleware(['auth', 'active-store'])->group(function () {
     Route::patch('kas/entri/{event}/metode', [LaporanController::class, 'updateCashMethod'])->name('kas.method');
     Route::post('kas/manual', [LaporanController::class, 'storeCashEntry'])->name('kas.manual.store');
     Route::delete('kas/manual/{cashEntry}', [LaporanController::class, 'destroyCashEntry'])->name('kas.manual.destroy');
+
+    // Biaya operasional toko (sewa, listrik, gaji, ATK) — dicatat semua peran,
+    // keluar dari Kas Harian dan mengurangi laba di Laporan.
+    Route::get('biaya-operasional', [BiayaOperasionalController::class, 'index'])->name('biaya.index');
+    Route::post('biaya-operasional', [BiayaOperasionalController::class, 'store'])->name('biaya.store');
+    Route::delete('biaya-operasional/{cashEntry}', [BiayaOperasionalController::class, 'destroy'])->name('biaya.destroy');
 
     // Transaksi
     Route::get('transaksi', [TransaksiController::class, 'index'])->name('transaksi.index');

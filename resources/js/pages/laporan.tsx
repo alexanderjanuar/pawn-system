@@ -65,6 +65,15 @@ type FeeIncome = {
     total: number;
     entries: FeeIncomeEntry[];
 };
+/** Net profit for the period, worked out on the server. */
+type Profit = {
+    pendapatan: number;
+    selisihJual: number;
+    terjual: number;
+    biayaOperasional: number;
+    labaBersih: number;
+};
+
 type Overview = {
     uangBeredar: number;
     barangAktif: number;
@@ -155,6 +164,7 @@ export default function Laporan({
     dailyTrend,
     overview,
     feeIncome,
+    profit,
 }: {
     transactions: Transaction[];
     period: Period;
@@ -162,6 +172,7 @@ export default function Laporan({
     dailyTrend: TrendPoint[];
     overview: Overview;
     feeIncome: FeeIncome;
+    profit: Profit;
 }) {
     const report = useMemo(() => buildReport(transactions), [transactions]);
 
@@ -322,6 +333,74 @@ export default function Laporan({
                         ))}
                     </div>
                 </div>
+
+                {/* Laba bersih: pendapatan ± jual barang − biaya toko */}
+                <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
+                    <div className="flex flex-wrap items-start justify-between gap-3 border-b px-5 py-4">
+                        <div>
+                            <h2 className="font-semibold">Laba Bersih</h2>
+                            <p className="text-xs text-muted-foreground">
+                                Pendapatan biaya &amp; denda, ditambah selisih
+                                jual barang, dikurangi biaya operasional toko ·{' '}
+                                {periodLabel}
+                            </p>
+                        </div>
+                        <Link
+                            href={`/biaya-operasional?${params}`}
+                            className="text-sm font-medium text-primary hover:underline"
+                        >
+                            Rincian biaya →
+                        </Link>
+                    </div>
+                    <div className="grid grid-cols-2 lg:grid-cols-4">
+                        <ProfitCell
+                            label="Pendapatan"
+                            value={formatRupiah(profit.pendapatan)}
+                            hint="biaya titipan, perpanjangan & denda"
+                        />
+                        <ProfitCell
+                            label="Selisih Jual Barang"
+                            value={`${profit.selisihJual < 0 ? '−' : '+'} ${formatRupiah(Math.abs(profit.selisihJual))}`}
+                            hint={
+                                profit.terjual > 0
+                                    ? `${profit.terjual} barang terjual (harga jual − pinjaman)`
+                                    : 'belum ada barang terjual'
+                            }
+                            tone={
+                                profit.selisihJual < 0
+                                    ? 'text-overdue'
+                                    : undefined
+                            }
+                            className="border-l"
+                        />
+                        <ProfitCell
+                            label="Biaya Operasional"
+                            value={`− ${formatRupiah(profit.biayaOperasional)}`}
+                            hint="sewa, listrik, gaji, ATK, dll."
+                            tone="text-overdue"
+                            className="border-t lg:border-t-0 lg:border-l"
+                        />
+                        <ProfitCell
+                            label="Laba Bersih"
+                            value={`${profit.labaBersih < 0 ? '−' : ''}${formatRupiah(Math.abs(profit.labaBersih))}`}
+                            hint={
+                                profit.labaBersih < 0
+                                    ? 'biaya lebih besar dari pendapatan'
+                                    : 'yang benar-benar tersisa untuk toko'
+                            }
+                            tone={
+                                profit.labaBersih < 0
+                                    ? 'text-overdue'
+                                    : 'text-primary'
+                            }
+                            emphasize
+                            className={cn(
+                                'border-t border-l lg:border-t-0',
+                                profit.labaBersih < 0 && 'bg-overdue-soft/40',
+                            )}
+                        />
+                    </div>
+                </section>
 
                 {/* Blok 2 — Kondisi Sekarang (snapshot, lepas dari filter) */}
                 <div className="flex flex-col gap-3">
@@ -933,6 +1012,46 @@ function ClerkDetailDialog({
                 </div>
             </DialogContent>
         </Dialog>
+    );
+}
+
+function ProfitCell({
+    label,
+    value,
+    hint,
+    tone,
+    emphasize = false,
+    className,
+}: {
+    label: string;
+    value: string;
+    hint: string;
+    tone?: string;
+    emphasize?: boolean;
+    className?: string;
+}) {
+    return (
+        <div
+            className={cn(
+                'flex min-w-0 flex-col gap-1 p-4 sm:p-5',
+                emphasize && 'bg-primary/5',
+                className,
+            )}
+        >
+            <span className="text-xs font-medium tracking-wide text-muted-foreground uppercase">
+                {label}
+            </span>
+            <span
+                className={cn(
+                    'truncate font-semibold tabular-nums',
+                    emphasize ? 'text-xl sm:text-2xl' : 'text-base sm:text-lg',
+                    tone,
+                )}
+            >
+                {value}
+            </span>
+            <span className="text-xs text-muted-foreground">{hint}</span>
+        </div>
     );
 }
 

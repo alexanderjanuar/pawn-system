@@ -6,6 +6,7 @@ const KIND_LABEL: Record<CashKind, string> = {
     perpanjang: 'Perpanjang',
     lelang: 'Jual Barang',
     pencairan: 'Pencairan',
+    operasional: 'Biaya Operasional',
     manual: 'Manual',
 };
 

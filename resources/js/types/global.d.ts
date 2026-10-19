@@ -20,6 +20,8 @@ declare module '@inertiajs/core' {
             activeStore: number | 'all';
             activeStoreName: string | null;
             serverDate: string; // YYYY-MM-DD, WITA — authoritative "today"
+            /** PHP upload limits in bytes (0 = none), checked before a form sends photos. */
+            uploadLimits: { perFile: number; total: number };
             /** Shop's late-fee rule, so a redemption can price any date. */
             dendaRule: {
                 mode: 'off' | 'percent_principal' | 'percent_fee' | 'nominal';

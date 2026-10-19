@@ -422,7 +422,31 @@ export function GadaiForm({
         ? null
         : 'Pembagian dompet belum pas dengan dana titipan. Perbaiki di kotak "Dompet sumber dana".';
 
-    const createDisabled = processing || missing.length > 0 || !fundingValid;
+    // Photos past the server's upload limit would make the whole save fail, so
+    // stop it here with the reason instead of after a long upload.
+    const uploadLimits = usePage().props.uploadLimits;
+    const uploads = [...data.photos, ...data.ktp];
+    const uploadBytes = uploads.reduce((sum, file) => sum + file.size, 0);
+    const toMb = (bytes: number) =>
+        (bytes / 1024 / 1024).toLocaleString('id-ID', {
+            maximumFractionDigits: 1,
+        });
+    const oversizedFile =
+        uploadLimits.perFile > 0
+            ? uploads.find((file) => file.size > uploadLimits.perFile)
+            : undefined;
+    // Leave headroom for the rest of the form's fields.
+    const uploadNote = oversizedFile
+        ? `Foto "${oversizedFile.name}" ${toMb(oversizedFile.size)} MB, melebihi batas ${toMb(uploadLimits.perFile)} MB per foto. Hapus lalu pilih ulang fotonya.`
+        : uploadLimits.total > 0 && uploadBytes > uploadLimits.total * 0.9
+          ? `Total foto ${toMb(uploadBytes)} MB, melebihi batas kirim ${toMb(uploadLimits.total)} MB. Kurangi jumlah foto.`
+          : null;
+
+    const createDisabled =
+        processing ||
+        missing.length > 0 ||
+        !fundingValid ||
+        uploadNote !== null;
     const fundingSplit = normalizeFunding(data.wallet_split, data.principal);
     const fundingLabel = fundingSplit
         ? fundingSplit
@@ -1962,11 +1986,16 @@ export function GadaiForm({
                             <MissingFields
                                 fields={missing}
                                 note={
-                                    isEdit
-                                        ? reasonMissing
-                                            ? 'Nominal berubah, jadi alasan perubahan wajib diisi.'
-                                            : null
-                                        : fundingNote
+                                    [
+                                        uploadNote,
+                                        isEdit
+                                            ? reasonMissing
+                                                ? 'Nominal berubah, jadi alasan perubahan wajib diisi.'
+                                                : null
+                                            : fundingNote,
+                                    ]
+                                        .filter(Boolean)
+                                        .join(' ') || null
                                 }
                             />
 
@@ -1977,7 +2006,8 @@ export function GadaiForm({
                                         disabled={
                                             processing ||
                                             missing.length > 0 ||
-                                            reasonMissing
+                                            reasonMissing ||
+                                            uploadNote !== null
                                         }
                                     >
                                         <Save />

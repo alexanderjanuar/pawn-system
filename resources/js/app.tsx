@@ -1,4 +1,5 @@
-import { createInertiaApp } from '@inertiajs/react';
+import { createInertiaApp, router } from '@inertiajs/react';
+import { toast } from 'sonner';
 import { ErrorBoundary } from '@/components/error-boundary';
 import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -42,6 +43,19 @@ createInertiaApp({
     progress: {
         color: '#4B5563',
     },
+});
+
+// The server refused the request body as too large (photos over the upload
+// limit). Keep the clerk on the form with everything they typed, and say why.
+router.on('httpException', (event) => {
+    if (event.detail.response.status === 413) {
+        toast.error(
+            'Foto terlalu besar untuk dikirim. Kurangi jumlah foto, lalu simpan lagi. Isian lain tidak hilang.',
+            { duration: 8000 },
+        );
+
+        return false;
+    }
 });
 
 // Errors thrown outside React's render pass (event handlers, async work) never

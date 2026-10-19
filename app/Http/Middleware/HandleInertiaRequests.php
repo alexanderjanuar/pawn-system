@@ -55,11 +55,44 @@ class HandleInertiaRequests extends Middleware
                 : 0,
             'approvalThreshold' => (int) Setting::get('approval_threshold', Transaction::APPROVAL_THRESHOLD),
             'dendaRule' => LateFee::settings(),
+            'uploadLimits' => $this->uploadLimits(),
             'wallets' => $request->user() ? $this->wallets() : [],
             'sidebarOpen' => ! $request->hasCookie('sidebar_state') || $request->cookie('sidebar_state') === 'true',
             'serverDate' => now()->toDateString(),
             ...$this->storeProps($request),
         ];
+    }
+
+    /**
+     * PHP's upload limits in bytes (0 = no limit), so a form can warn before
+     * sending photos the server would reject outright.
+     *
+     * @return array{perFile: int, total: int}
+     */
+    protected function uploadLimits(): array
+    {
+        return [
+            'perFile' => $this->iniBytes('upload_max_filesize'),
+            'total' => $this->iniBytes('post_max_size'),
+        ];
+    }
+
+    private function iniBytes(string $key): int
+    {
+        $value = trim((string) ini_get($key));
+
+        if ($value === '' || $value === '-1') {
+            return 0;
+        }
+
+        $number = (int) $value;
+
+        return match (strtolower(substr($value, -1))) {
+            'g' => $number * 1024 ** 3,
+            'm' => $number * 1024 ** 2,
+            'k' => $number * 1024,
+            default => $number,
+        };
     }
 
     /**

@@ -1,6 +1,7 @@
-import { ImagePlus, X } from 'lucide-react';
+import { ImagePlus, Loader2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Label } from '@/components/ui/label';
+import { compressImages } from '@/lib/compress-image';
 import { cn } from '@/lib/utils';
 
 /**
@@ -27,6 +28,8 @@ export function FileDropzone({
 }) {
     const inputRef = useRef<HTMLInputElement>(null);
     const [dragOver, setDragOver] = useState(false);
+    // Photos are shrunk before they join the form; block new picks meanwhile.
+    const [busy, setBusy] = useState(false);
 
     const previews = useMemo(
         () => value.map((file) => ({ file, url: URL.createObjectURL(file) })),
@@ -38,8 +41,8 @@ export function FileDropzone({
         [previews],
     );
 
-    const addFiles = (files: FileList | null) => {
-        if (!files) {
+    const addFiles = async (files: FileList | null) => {
+        if (!files || busy) {
             return;
         }
 
@@ -51,10 +54,20 @@ export function FileDropzone({
             return;
         }
 
-        onChange(multiple ? [...value, ...incoming] : incoming.slice(0, 1));
+        setBusy(true);
+
+        try {
+            const ready = await compressImages(
+                multiple ? incoming : incoming.slice(0, 1),
+            );
+
+            onChange(multiple ? [...value, ...ready] : ready);
+        } finally {
+            setBusy(false);
+        }
     };
 
-    const openPicker = () => inputRef.current?.click();
+    const openPicker = () => !busy && inputRef.current?.click();
 
     return (
         <div className="grid gap-1.5">
@@ -158,6 +171,12 @@ export function FileDropzone({
                     </div>
                 )}
             </div>
+            {busy && (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Loader2 className="size-3.5 animate-spin" />
+                    Mengecilkan foto supaya cepat terkirim…
+                </p>
+            )}
         </div>
     );
 }

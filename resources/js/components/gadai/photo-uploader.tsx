@@ -1,4 +1,4 @@
-import { ImagePlus, X } from 'lucide-react';
+import { ImagePlus, Loader2, X } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Label } from '@/components/ui/label';
 import {
@@ -8,6 +8,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { compressImages } from '@/lib/compress-image';
 import { cn } from '@/lib/utils';
 
 const NO_LABEL = '__none__';
@@ -37,6 +38,8 @@ export function PhotoUploader({
 }) {
     const inputRef = useRef<HTMLInputElement>(null);
     const [dragOver, setDragOver] = useState(false);
+    // Photos are shrunk before they join the form; block new picks meanwhile.
+    const [busy, setBusy] = useState(false);
 
     const previews = useMemo(
         () => files.map((file) => ({ file, url: URL.createObjectURL(file) })),
@@ -48,8 +51,8 @@ export function PhotoUploader({
         [previews],
     );
 
-    const addFiles = (list: FileList | null) => {
-        if (!list) {
+    const addFiles = async (list: FileList | null) => {
+        if (!list || busy) {
             return;
         }
 
@@ -61,10 +64,15 @@ export function PhotoUploader({
             return;
         }
 
-        onChange(
-            [...files, ...incoming],
-            [...labels, ...incoming.map(() => '')],
-        );
+        setBusy(true);
+
+        try {
+            const ready = await compressImages(incoming);
+
+            onChange([...files, ...ready], [...labels, ...ready.map(() => '')]);
+        } finally {
+            setBusy(false);
+        }
     };
 
     const removeAt = (index: number) =>
@@ -79,7 +87,7 @@ export function PhotoUploader({
             labels.map((l, i) => (i === index ? value : l)),
         );
 
-    const openPicker = () => inputRef.current?.click();
+    const openPicker = () => !busy && inputRef.current?.click();
 
     return (
         <div className="grid gap-1.5">
@@ -134,7 +142,10 @@ export function PhotoUploader({
                     <div className="p-3">
                         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                             {previews.map((p, index) => (
-                                <div key={p.url} className="flex flex-col gap-1.5">
+                                <div
+                                    key={p.url}
+                                    className="flex flex-col gap-1.5"
+                                >
                                     <div className="group relative aspect-square overflow-hidden rounded-md border bg-muted">
                                         <img
                                             src={p.url}
@@ -201,6 +212,12 @@ export function PhotoUploader({
                     </div>
                 )}
             </div>
+            {busy && (
+                <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+                    <Loader2 className="size-3.5 animate-spin" />
+                    Mengecilkan foto supaya cepat terkirim…
+                </p>
+            )}
         </div>
     );
 }

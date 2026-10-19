@@ -13,4 +13,6 @@ export type NavItem = {
     isActive?: boolean;
     badge?: string | number;
     badgeTone?: 'default' | 'urgent';
+    /** Also highlight on sub-pages (e.g. a transaction's detail page). */
+    matchPrefix?: boolean;
 };

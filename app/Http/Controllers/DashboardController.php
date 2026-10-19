@@ -50,6 +50,7 @@ class DashboardController extends Controller
             ),
             'reviewCount' => $review->count(),
             'monthIncome' => $this->monthIncome(),
+            'awaitingSale' => $this->awaitingSale(),
         ]);
     }
 
@@ -71,5 +72,46 @@ class DashboardController extends Controller
             ->sum(fn (TransactionEvent $event): int => $event->type === 'redeemed'
                 ? max(0, (int) $event->amount - (int) ($event->transaction?->principal ?? 0))
                 : (int) $event->amount);
+    }
+
+    /**
+     * Auction items still waiting for their sale to be recorded, oldest first,
+     * so money from a sold item cannot quietly stay out of Kas Harian.
+     *
+     * @return array{count: int, principal: int, items: list<array{code: string, customer: string, device: string, principal: int, since: string, days: int}>}
+     */
+    private function awaitingSale(): array
+    {
+        $today = now()->startOfDay();
+
+        $items = Transaction::query()
+            ->forActiveStore()
+            ->awaitingSale()
+            ->with([
+                'customer:id,name',
+                'events' => fn ($query) => $query->where('type', 'auctioned')->orderByDesc('event_date')->orderByDesc('id'),
+            ])
+            ->get()
+            ->map(function (Transaction $t) use ($today): array {
+                // When it was put up for auction; older rows may lack the event.
+                $since = $t->events->first()?->event_date ?? $t->updated_at;
+
+                return [
+                    'code' => $t->code,
+                    'customer' => $t->customer?->name ?? '—',
+                    'device' => $t->device_name,
+                    'principal' => (int) $t->principal,
+                    'since' => $since->format('Y-m-d'),
+                    'days' => max(0, (int) $since->copy()->startOfDay()->diffInDays($today)),
+                ];
+            })
+            ->sortBy('since')
+            ->values();
+
+        return [
+            'count' => $items->count(),
+            'principal' => (int) $items->sum('principal'),
+            'items' => $items->take(6)->all(),
+        ];
     }
 }

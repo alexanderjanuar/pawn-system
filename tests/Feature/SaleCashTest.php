@@ -76,3 +76,54 @@ test('only marking an item for auction does not touch the cash', function () {
             ->where('cashFlow.in.total', 0),
         );
 });
+
+test('the dashboard lists auction items whose sale is not recorded, oldest first', function () {
+    $store = Store::create(['code' => 'TK-001', 'nota_prefix' => 'GCG', 'name' => 'Toko A', 'active' => true]);
+    $this->actingAs(User::factory()->owner()->create())->withSession(['active_store_id' => $store->id]);
+
+    $older = saleCashItem($store, 'LELANG');
+    $older->events()->create(['type' => 'auctioned', 'event_date' => now()->subDays(20), 'title' => 'Ditandai untuk lelang']);
+
+    $newer = Transaction::create([
+        ...$older->only(['store_id', 'customer_id', 'device_owner', 'kelengkapan', 'principal', 'tenor_days', 'fee_percent', 'fee', 'start_date', 'due_date', 'approval_status', 'clerk']),
+        'code' => 'GCG-SALE-NEW', 'device_name' => 'HP baru', 'status' => 'LELANG',
+    ]);
+    $newer->events()->create(['type' => 'auctioned', 'event_date' => now()->subDays(3), 'title' => 'Ditandai untuk lelang']);
+
+    // Already sold, and merely "Tidak Diambil": neither belongs on the list.
+    $sold = saleCashItem($store, 'TIDAK_DIAMBIL');
+    $this->post("/transaksi/{$sold->code}/sale", ['sale_value' => 700_000]);
+    saleCashItem($store, 'AKTIF')->update(['code' => 'GCG-SALE-TD', 'status' => 'TIDAK_DIAMBIL']);
+
+    $this->get('/dashboard')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('awaitingSale.count', 2)
+            ->where('awaitingSale.principal', 2_000_000)
+            ->where('awaitingSale.items.0.code', $older->code)
+            ->where('awaitingSale.items.0.days', 20)
+            ->where('awaitingSale.items.1.code', 'GCG-SALE-NEW'),
+        );
+
+    // Recording the sale takes it off the list.
+    $this->post("/transaksi/{$older->code}/sale", ['sale_value' => 900_000])->assertSessionHas('success');
+
+    $this->get('/dashboard')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('awaitingSale.count', 1)
+            ->where('awaitingSale.items.0.code', 'GCG-SALE-NEW'),
+        );
+});
+
+test('the sidebar badge counts unsold auction items, for management only', function () {
+    $store = Store::create(['code' => 'TK-001', 'nota_prefix' => 'GCG', 'name' => 'Toko A', 'active' => true]);
+    saleCashItem($store, 'LELANG');
+
+    $this->actingAs(User::factory()->owner()->create())
+        ->withSession(['active_store_id' => $store->id])
+        ->get('/transaksi')
+        ->assertInertia(fn (Assert $page) => $page->where('awaitingSaleCount', 1));
+
+    $this->actingAs(User::factory()->petugas()->create(['store_id' => $store->id]))
+        ->get('/transaksi')
+        ->assertInertia(fn (Assert $page) => $page->where('awaitingSaleCount', 0));
+});

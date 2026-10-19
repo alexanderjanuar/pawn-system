@@ -101,7 +101,15 @@ export default function TransaksiShow({
     const dendaShown = tx.status === 'DIAMBIL' ? tx.denda : tx.dendaDue;
     const d = daysUntil(tx.dueDate);
     const [deleteOpen, setDeleteOpen] = useState(false);
-    const [saleOpen, setSaleOpen] = useState(false);
+    // Arriving from a "Catat Penjualan" shortcut (?jual=1) opens the form.
+    const pageUrl = usePage().url;
+    const [saleOpen, setSaleOpen] = useState(
+        () =>
+            pageUrl.includes('jual=1') &&
+            ['LELANG', 'TIDAK_DIAMBIL'].includes(tx.status) &&
+            tx.saleValue == null &&
+            tx.soldAt == null,
+    );
     const [lelangOpen, setLelangOpen] = useState(false);
     const [revertOpen, setRevertOpen] = useState(false);
     const [revertExtendOpen, setRevertExtendOpen] = useState(false);

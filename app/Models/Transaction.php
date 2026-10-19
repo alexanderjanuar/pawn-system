@@ -170,6 +170,20 @@ class Transaction extends Model
      *
      * @param  Builder<Transaction>  $query
      */
+    /**
+     * Items put up for auction whose sale has not been recorded yet: the money
+     * from these has not reached Kas Harian.
+     *
+     * @param  Builder<Transaction>  $query
+     */
+    #[Scope]
+    protected function awaitingSale(Builder $query): void
+    {
+        $query->where('status', 'LELANG')
+            ->where('approval_status', 'approved')
+            ->whereNull('sold_at');
+    }
+
     #[Scope]
     protected function forActiveStore(Builder $query): void
     {

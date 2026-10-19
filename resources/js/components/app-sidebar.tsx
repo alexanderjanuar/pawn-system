@@ -1,16 +1,18 @@
 import { Link, usePage } from '@inertiajs/react';
 import {
     BadgePercent,
+    Banknote,
     Boxes,
     CalendarClock,
+    ChartColumnBig,
+    ClipboardList,
+    Gavel,
     HandCoins,
     History,
     KeyRound,
     LayoutDashboard,
     PlusCircle,
-    Receipt,
     ReceiptText,
-    ScrollText,
     Store,
     UserCog,
     Users,
@@ -32,62 +34,78 @@ import {
 } from '@/components/ui/sidebar';
 import type { NavItem } from '@/types';
 
-const ownerNavItems: NavItem[] = [
-    { title: 'Kelola Toko', href: '/pengaturan/toko', icon: Store },
+/** Rarely touched once the shop is set up, so the group folds away. */
+const settingsNavItems: NavItem[] = [
+    { title: 'Toko', href: '/pengaturan/toko', icon: Store },
     {
-        title: 'Pengaturan Biaya',
-        href: '/pengaturan/biaya',
-        icon: BadgePercent,
+        title: 'Petugas',
+        href: '/pengaturan/petugas',
+        icon: UserCog,
+        matchPrefix: true,
     },
-    { title: 'Kelola Petugas', href: '/pengaturan/petugas', icon: UserCog },
-    { title: 'Kelola Dompet', href: '/pengaturan/dompet', icon: Wallet },
-    { title: 'Kelola Akun', href: '/pengaturan/akun', icon: KeyRound },
+    { title: 'Akun Login', href: '/pengaturan/akun', icon: KeyRound },
+    { title: 'Dompet', href: '/pengaturan/dompet', icon: Wallet },
+    { title: 'Biaya & Denda', href: '/pengaturan/biaya', icon: BadgePercent },
 ];
 
 export function AppSidebar() {
     const page = usePage().props;
-    // Items needing action today, for the Jatuh Tempo badge (shared prop).
-    const attention = page.overdueCount;
-    // Owner-only tools are hidden from petugas.
+    // Owner/admin tools are hidden from petugas.
     const isManagement =
         page.auth.user?.role === 'owner' || page.auth.user?.role === 'admin';
 
     // Home differs by role: petugas has no financial dashboard.
     const homeHref = isManagement ? '/dashboard' : '/transaksi';
 
-    // Operational items every role sees.
-    const operationalNavItems: NavItem[] = [
-        { title: 'Transaksi', href: '/transaksi', icon: Receipt },
-        { title: 'Kas Harian', href: '/kas', icon: Wallet },
+    // The pawn itself: taking items in, chasing due dates, who and where.
+    const gadaiNavItems: NavItem[] = [
+        {
+            title: 'Transaksi',
+            href: '/transaksi',
+            icon: ClipboardList,
+            matchPrefix: true,
+        },
+        {
+            title: 'Jatuh Tempo',
+            href: '/jatuh-tempo',
+            icon: CalendarClock,
+            badge: page.overdueCount || undefined,
+            badgeTone: 'urgent',
+        },
+        {
+            title: 'Pelanggan',
+            href: '/pelanggan',
+            icon: Users,
+            matchPrefix: true,
+        },
+        { title: 'Rak', href: '/rak', icon: Boxes, matchPrefix: true },
+    ];
+
+    // Money in and out of the drawer.
+    const keuanganNavItems: NavItem[] = [
+        { title: 'Kas Harian', href: '/kas', icon: Banknote },
         {
             title: 'Biaya Operasional',
             href: '/biaya-operasional',
             icon: ReceiptText,
         },
-        { title: 'Pelanggan', href: '/pelanggan', icon: Users },
-        { title: 'Piutang', href: '/piutang', icon: HandCoins },
-        { title: 'Rak', href: '/rak', icon: Boxes },
         {
-            title: 'Jatuh Tempo',
-            href: '/jatuh-tempo',
-            icon: CalendarClock,
-            badge: attention || undefined,
-            badgeTone: 'urgent',
+            title: 'Piutang',
+            href: '/piutang',
+            icon: HandCoins,
+            matchPrefix: true,
         },
     ];
 
-    // Management gets the dashboard at the top of the operational group;
-    // petugas go straight to their day-to-day items.
-    const mainNavItems: NavItem[] = isManagement
-        ? [
-              { title: 'Dashboard', href: '/dashboard', icon: LayoutDashboard },
-              ...operationalNavItems,
-          ]
-        : operationalNavItems;
-
-    // Reports & audit log are management-only, grouped on their own.
-    const reportNavItems: NavItem[] = [
-        { title: 'Laporan', href: '/laporan', icon: ScrollText },
+    const laporanNavItems: NavItem[] = [
+        { title: 'Laporan', href: '/laporan', icon: ChartColumnBig },
+        {
+            title: 'Barang Lelang',
+            href: '/laporan/lelang',
+            icon: Gavel,
+            badge: page.awaitingSaleCount || undefined,
+            badgeTone: 'urgent',
+        },
         { title: 'Aktivitas', href: '/aktivitas', icon: History },
     ];
 
@@ -105,7 +123,7 @@ export function AppSidebar() {
                 </SidebarMenu>
             </SidebarHeader>
 
-            <SidebarContent>
+            <SidebarContent className="gap-1">
                 <SidebarGroup className="px-2 pt-0 pb-1 group-data-[collapsible=icon]:px-1.5">
                     <Button
                         asChild
@@ -120,12 +138,28 @@ export function AppSidebar() {
                     </Button>
                 </SidebarGroup>
 
-                <NavMain items={mainNavItems} label="Operasional" />
                 {isManagement && (
-                    <NavMain items={reportNavItems} label="Laporan" />
+                    <NavMain
+                        items={[
+                            {
+                                title: 'Dashboard',
+                                href: '/dashboard',
+                                icon: LayoutDashboard,
+                            },
+                        ]}
+                    />
+                )}
+                <NavMain items={gadaiNavItems} label="Gadai" />
+                <NavMain items={keuanganNavItems} label="Keuangan" />
+                {isManagement && (
+                    <NavMain items={laporanNavItems} label="Laporan" />
                 )}
                 {isManagement && (
-                    <NavMain items={ownerNavItems} label="Pemilik" />
+                    <NavMain
+                        items={settingsNavItems}
+                        label="Pengaturan"
+                        collapsible
+                    />
                 )}
             </SidebarContent>
 

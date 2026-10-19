@@ -14,6 +14,8 @@ declare module '@inertiajs/core' {
             auth: Auth;
             sidebarOpen: boolean;
             overdueCount: number;
+            /** Auction items whose sale is not recorded yet (management only). */
+            awaitingSaleCount: number;
             approvalThreshold: number;
             wallets: { id: number; name: string; isDefault: boolean }[];
             stores: { id: number; name: string; code: string }[];

@@ -7,6 +7,7 @@ import {
     ChevronRight,
     Clock,
     FileText,
+    Coins,
     Gavel,
     MessageCircle,
     PlusCircle,
@@ -144,6 +145,7 @@ export default function Dashboard({
     reviewQueue,
     reviewCount,
     monthIncome,
+    awaitingSale,
 }: {
     transactions: Transaction[];
     pendingApprovals: Transaction[];
@@ -151,6 +153,19 @@ export default function Dashboard({
     reviewCount: number;
     /** Income earned in the running month, computed by the server. */
     monthIncome: number;
+    /** Auction items whose sale is not recorded yet, oldest first. */
+    awaitingSale: {
+        count: number;
+        principal: number;
+        items: {
+            code: string;
+            customer: string;
+            device: string;
+            principal: number;
+            since: string;
+            days: number;
+        }[];
+    };
 }) {
     const page = usePage().props;
     const role = page.auth.user?.role;
@@ -372,6 +387,95 @@ export default function Dashboard({
                                 </li>
                             ))}
                         </ul>
+                    </section>
+                )}
+
+                {awaitingSale.count > 0 && (
+                    <section className="overflow-hidden rounded-xl border border-lelang/30 bg-card shadow-sm">
+                        <div className="flex flex-wrap items-center gap-2 border-b border-lelang/20 bg-lelang-soft/30 px-5 py-4">
+                            <Gavel className="size-4 text-lelang" />
+                            <h2 className="font-semibold">
+                                Lelang Belum Dicatat Penjualannya
+                            </h2>
+                            <span className="inline-flex items-center rounded-full bg-lelang px-2 py-0.5 text-[11px] font-medium text-white tabular-nums">
+                                {awaitingSale.count}
+                            </span>
+                            <p className="ml-1 hidden text-xs text-muted-foreground sm:block">
+                                Uangnya belum masuk Kas Harian ·{' '}
+                                {formatRupiah(awaitingSale.principal)} pinjaman
+                                tertahan
+                            </p>
+                            <Link
+                                href="/laporan/lelang?status=belum"
+                                className="ml-auto text-sm font-medium text-primary hover:underline"
+                            >
+                                Lihat semua
+                            </Link>
+                        </div>
+                        <ul className="divide-y">
+                            {awaitingSale.items.map((item) => (
+                                <li
+                                    key={item.code}
+                                    className="flex flex-col gap-2 px-5 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+                                >
+                                    <div className="min-w-0">
+                                        <p className="truncate text-sm">
+                                            <span className="font-semibold">
+                                                {item.customer}
+                                            </span>{' '}
+                                            <span className="text-muted-foreground">
+                                                · {item.device}
+                                            </span>
+                                        </p>
+                                        <p className="mt-0.5 text-xs text-muted-foreground tabular-nums">
+                                            <Link
+                                                href={`/transaksi/${item.code}`}
+                                                className="font-medium text-foreground hover:text-primary hover:underline"
+                                            >
+                                                {item.code}
+                                            </Link>{' '}
+                                            · pinjaman{' '}
+                                            {formatRupiah(item.principal)} ·{' '}
+                                            <span
+                                                className={cn(
+                                                    item.days >= 14 &&
+                                                        'font-medium text-lelang',
+                                                )}
+                                            >
+                                                {item.days === 0
+                                                    ? 'dilelang hari ini'
+                                                    : `dilelang ${item.days} hari lalu`}
+                                            </span>
+                                        </p>
+                                    </div>
+                                    <Button
+                                        asChild
+                                        size="sm"
+                                        className="shrink-0 self-start sm:self-auto"
+                                    >
+                                        <Link
+                                            href={`/transaksi/${item.code}?jual=1`}
+                                        >
+                                            <Coins />
+                                            Catat Penjualan
+                                        </Link>
+                                    </Button>
+                                </li>
+                            ))}
+                        </ul>
+                        {awaitingSale.count > awaitingSale.items.length && (
+                            <div className="border-t px-5 py-3 text-sm text-muted-foreground">
+                                dan{' '}
+                                {awaitingSale.count - awaitingSale.items.length}{' '}
+                                barang lagi ·{' '}
+                                <Link
+                                    href="/laporan/lelang?status=belum"
+                                    className="font-medium text-primary hover:underline"
+                                >
+                                    lihat semua
+                                </Link>
+                            </div>
+                        )}
                     </section>
                 )}
 

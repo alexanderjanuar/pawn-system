@@ -53,6 +53,10 @@ class HandleInertiaRequests extends Middleware
             'overdueCount' => $request->user()
                 ? $this->overdueCount($this->resolveActiveStoreId($request))
                 : 0,
+            // Only management sees the auction report, so only they need it.
+            'awaitingSaleCount' => $request->user()?->isManagement()
+                ? $this->awaitingSaleCount($this->resolveActiveStoreId($request))
+                : 0,
             'approvalThreshold' => (int) Setting::get('approval_threshold', Transaction::APPROVAL_THRESHOLD),
             'dendaRule' => LateFee::settings(),
             'uploadLimits' => $this->uploadLimits(),
@@ -172,6 +176,17 @@ class HandleInertiaRequests extends Middleware
                 ? Store::query()->whereKey($activeId)->value('name')
                 : ($user->isManagement() ? 'Semua Toko' : null),
         ];
+    }
+
+    /**
+     * Auction items whose sale is not recorded yet, for the sidebar badge.
+     */
+    protected function awaitingSaleCount(?int $storeId): int
+    {
+        return Transaction::query()
+            ->when($storeId !== null, fn ($query) => $query->where('store_id', $storeId))
+            ->awaitingSale()
+            ->count();
     }
 
     /**

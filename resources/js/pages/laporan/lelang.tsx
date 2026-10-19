@@ -1,11 +1,11 @@
-import { Head, Link } from '@inertiajs/react';
-import { ArrowLeft, Gavel, PackageOpen } from 'lucide-react';
-import { useMemo } from 'react';
+import { Head, Link, usePage } from '@inertiajs/react';
+import { ArrowLeft, Coins, Gavel, PackageOpen } from 'lucide-react';
+import { useMemo, useState } from 'react';
 import { PageHeader } from '@/components/gadai/page-header';
 import { TablePagination } from '@/components/table-pagination';
 import { Button } from '@/components/ui/button';
 import { usePagination } from '@/hooks/use-pagination';
-import { formatDate, formatRupiah } from '@/lib/format';
+import { daysUntil, formatDate, formatRupiah } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import type { Transaction } from '@/types/gadai';
 
@@ -18,12 +18,44 @@ function saleNet(t: Transaction): number | null {
     return t.saleValue - t.principal;
 }
 
+/** When the item was put up for auction (its latest auction event). */
+function auctionedOn(t: Transaction): string {
+    const marks = t.history.filter((e) => e.type === 'auctioned' && !e.amount);
+
+    return marks.length > 0 ? marks[marks.length - 1].date : t.dueDate;
+}
+
+type Filter = 'semua' | 'belum' | 'terjual';
+
 export default function LaporanLelang({
     transactions,
 }: {
     transactions: Transaction[];
 }) {
-    const rincian = usePagination(transactions, 10);
+    // Opened from the dashboard with ?status=belum to land on what is left.
+    const url = usePage().url;
+    const [filter, setFilter] = useState<Filter>(() =>
+        url.includes('status=belum') ? 'belum' : 'semua',
+    );
+
+    const shown = useMemo(() => {
+        const list = transactions.filter((t) =>
+            filter === 'belum'
+                ? t.saleValue == null
+                : filter === 'terjual'
+                  ? t.saleValue != null
+                  : true,
+        );
+
+        // Unsold first and oldest first: those have waited longest.
+        return filter === 'belum'
+            ? [...list].sort((a, b) =>
+                  auctionedOn(a).localeCompare(auctionedOn(b)),
+              )
+            : list;
+    }, [transactions, filter]);
+
+    const rincian = usePagination(shown, 10);
 
     const totals = useMemo(() => {
         let pinjaman = 0;
@@ -160,6 +192,66 @@ export default function LaporanLelang({
                     </span>
                 </div>
 
+                {/* Filter */}
+                <div className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1">
+                    {(
+                        [
+                            {
+                                key: 'semua',
+                                label: 'Semua',
+                                count: totals.count,
+                            },
+                            {
+                                key: 'belum',
+                                label: 'Belum dicatat penjualannya',
+                                count: totals.belum,
+                            },
+                            {
+                                key: 'terjual',
+                                label: 'Terjual',
+                                count: totals.terjual,
+                            },
+                        ] as const
+                    ).map((tab) => (
+                        <button
+                            key={tab.key}
+                            type="button"
+                            onClick={() => {
+                                setFilter(tab.key);
+                                rincian.setPage(1);
+                            }}
+                            className={cn(
+                                'flex shrink-0 items-center gap-2 rounded-lg border px-3 py-1.5 text-sm font-medium transition-colors',
+                                filter === tab.key
+                                    ? 'border-transparent bg-primary text-primary-foreground'
+                                    : tab.key === 'belum' && tab.count > 0
+                                      ? 'border-lelang/30 bg-lelang-soft/40 text-lelang hover:bg-lelang-soft'
+                                      : 'border-border bg-card text-muted-foreground hover:bg-accent hover:text-foreground',
+                            )}
+                        >
+                            {tab.label}
+                            <span
+                                className={cn(
+                                    'rounded-full px-1.5 text-xs tabular-nums',
+                                    filter === tab.key
+                                        ? 'bg-primary-foreground/15'
+                                        : 'bg-muted',
+                                )}
+                            >
+                                {tab.count}
+                            </span>
+                        </button>
+                    ))}
+                </div>
+
+                {totals.belum > 0 && filter !== 'terjual' && (
+                    <p className="-mt-2 text-xs text-muted-foreground">
+                        Uang dari barang yang belum dicatat penjualannya belum
+                        masuk Kas Harian. Tekan <b>Catat Penjualan</b> begitu
+                        barangnya laku.
+                    </p>
+                )}
+
                 {/* Table */}
                 <div className="overflow-hidden rounded-xl border bg-card shadow-sm">
                     <div className="overflow-x-auto">
@@ -170,7 +262,7 @@ export default function LaporanLelang({
                                         Kode / Barang
                                     </th>
                                     <th className="px-5 py-3 font-medium">
-                                        Jatuh Tempo
+                                        Dilelang Sejak
                                     </th>
                                     <th className="px-5 py-3 text-right font-medium">
                                         Nilai Pinjaman
@@ -205,19 +297,53 @@ export default function LaporanLelang({
                                                         {t.customer.name}
                                                     </div>
                                                 </td>
-                                                <td className="px-5 py-3 whitespace-nowrap tabular-nums text-muted-foreground">
-                                                    {formatDate(t.dueDate)}
+                                                <td className="px-5 py-3 whitespace-nowrap text-muted-foreground tabular-nums">
+                                                    {formatDate(auctionedOn(t))}
+                                                    {t.saleValue == null && (
+                                                        <div
+                                                            className={cn(
+                                                                'text-xs',
+                                                                -daysUntil(
+                                                                    auctionedOn(
+                                                                        t,
+                                                                    ),
+                                                                ) >= 14 &&
+                                                                    'font-medium text-lelang',
+                                                            )}
+                                                        >
+                                                            {Math.max(
+                                                                0,
+                                                                -daysUntil(
+                                                                    auctionedOn(
+                                                                        t,
+                                                                    ),
+                                                                ),
+                                                            )}{' '}
+                                                            hari menunggu
+                                                        </div>
+                                                    )}
                                                 </td>
                                                 <td className="px-5 py-3 text-right font-medium tabular-nums">
                                                     {formatRupiah(t.principal)}
                                                 </td>
                                                 <td className="px-5 py-3 text-right tabular-nums">
                                                     {t.saleValue != null ? (
-                                                        formatRupiah(t.saleValue)
+                                                        formatRupiah(
+                                                            t.saleValue,
+                                                        )
                                                     ) : (
-                                                        <span className="text-xs text-muted-foreground">
-                                                            Belum terjual
-                                                        </span>
+                                                        <Button
+                                                            asChild
+                                                            size="sm"
+                                                            variant="outline"
+                                                        >
+                                                            <Link
+                                                                href={`/transaksi/${t.id}?jual=1`}
+                                                            >
+                                                                <Coins />
+                                                                Catat Penjualan
+                                                            </Link>
+                                                        </Button>
                                                     )}
                                                 </td>
                                                 <td className="px-5 py-3 text-right font-medium tabular-nums">
@@ -252,7 +378,11 @@ export default function LaporanLelang({
                                             className="px-5 py-12 text-center text-muted-foreground"
                                         >
                                             <PackageOpen className="mx-auto mb-2 size-8" />
-                                            Belum ada barang lelang.
+                                            {filter === 'belum'
+                                                ? 'Semua barang lelang sudah dicatat penjualannya.'
+                                                : filter === 'terjual'
+                                                  ? 'Belum ada barang lelang yang terjual.'
+                                                  : 'Belum ada barang lelang.'}
                                         </td>
                                     </tr>
                                 )}

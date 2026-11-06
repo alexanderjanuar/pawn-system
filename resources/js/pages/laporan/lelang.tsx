@@ -1,5 +1,13 @@
 import { Head, Link, usePage } from '@inertiajs/react';
-import { ArrowLeft, Coins, Gavel, PackageOpen } from 'lucide-react';
+import {
+    ArrowDown,
+    ArrowLeft,
+    ArrowUp,
+    ArrowUpDown,
+    Coins,
+    Gavel,
+    PackageOpen,
+} from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { PageHeader } from '@/components/gadai/page-header';
 import { TablePagination } from '@/components/table-pagination';
@@ -26,19 +34,43 @@ function auctionedOn(t: Transaction): string {
 }
 
 type Filter = 'semua' | 'belum' | 'terjual';
+type SortKey = 'kode' | 'auctioned' | 'principal' | 'sale' | 'net';
+type SortDir = 'asc' | 'desc';
+
+const SORT_FNS: Record<SortKey, (a: Transaction, b: Transaction) => number> = {
+    // Same as Transaksi: by tanggal masuk, then exact creation time, since
+    // nota prefixes differ per store.
+    kode: (a, b) =>
+        a.startDate.localeCompare(b.startDate) ||
+        (a.createdAt ?? '').localeCompare(b.createdAt ?? ''),
+    auctioned: (a, b) => auctionedOn(a).localeCompare(auctionedOn(b)),
+    principal: (a, b) => a.principal - b.principal,
+    sale: (a, b) => (a.saleValue ?? 0) - (b.saleValue ?? 0),
+    net: (a, b) => (saleNet(a) ?? 0) - (saleNet(b) ?? 0),
+};
+
+/** Columns that only have a value once the sale is recorded. */
+const SALE_KEYS: SortKey[] = ['sale', 'net'];
 
 export default function LaporanLelang({
     transactions,
 }: {
     transactions: Transaction[];
 }) {
-    // Opened from the dashboard with ?status=belum to land on what is left.
+    // Opened from the dashboard with ?status=belum to land on what is left,
+    // longest-waiting first.
     const url = usePage().url;
-    const [filter, setFilter] = useState<Filter>(() =>
-        url.includes('status=belum') ? 'belum' : 'semua',
+    const landedOnBelum = url.includes('status=belum');
+    const [filter, setFilter] = useState<Filter>(
+        landedOnBelum ? 'belum' : 'semua',
+    );
+    const [sortKey, setSortKey] = useState<SortKey>('auctioned');
+    const [sortDir, setSortDir] = useState<SortDir>(
+        landedOnBelum ? 'asc' : 'desc',
     );
 
     const shown = useMemo(() => {
+        const dir = sortDir === 'asc' ? 1 : -1;
         const list = transactions.filter((t) =>
             filter === 'belum'
                 ? t.saleValue == null
@@ -47,15 +79,71 @@ export default function LaporanLelang({
                   : true,
         );
 
-        // Unsold first and oldest first: those have waited longest.
-        return filter === 'belum'
-            ? [...list].sort((a, b) =>
-                  auctionedOn(a).localeCompare(auctionedOn(b)),
-              )
-            : list;
-    }, [transactions, filter]);
+        return list.sort(
+            (a, b) =>
+                // Unsold rows have no sale value: keep them below sold ones
+                // in either direction instead of counting them as Rp0.
+                (SALE_KEYS.includes(sortKey)
+                    ? Number(a.saleValue == null) - Number(b.saleValue == null)
+                    : 0) ||
+                SORT_FNS[sortKey](a, b) * dir ||
+                SORT_FNS.kode(b, a),
+        );
+    }, [transactions, filter, sortKey, sortDir]);
 
     const rincian = usePagination(shown, 10);
+
+    const toggleSort = (key: SortKey) => {
+        if (sortKey === key) {
+            setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
+        } else {
+            setSortKey(key);
+            // Every column here is a date or an amount: newest/largest first.
+            setSortDir('desc');
+        }
+
+        rincian.setPage(1);
+    };
+
+    const sortHead = (label: string, key: SortKey, align?: 'right') => {
+        const active = sortKey === key;
+        const Icon = active
+            ? sortDir === 'asc'
+                ? ArrowUp
+                : ArrowDown
+            : ArrowUpDown;
+
+        return (
+            <th
+                aria-sort={
+                    active
+                        ? sortDir === 'asc'
+                            ? 'ascending'
+                            : 'descending'
+                        : undefined
+                }
+                className={cn('px-5 py-3', align === 'right' && 'text-right')}
+            >
+                <button
+                    type="button"
+                    onClick={() => toggleSort(key)}
+                    className={cn(
+                        'inline-flex items-center gap-1 font-medium tracking-wide uppercase transition-colors hover:text-foreground',
+                        active && 'text-foreground',
+                        align === 'right' && 'flex-row-reverse',
+                    )}
+                >
+                    {label}
+                    <Icon
+                        className={cn(
+                            'size-3',
+                            active ? 'opacity-100' : 'opacity-40',
+                        )}
+                    />
+                </button>
+            </th>
+        );
+    };
 
     const totals = useMemo(() => {
         let pinjaman = 0;
@@ -258,21 +346,15 @@ export default function LaporanLelang({
                         <table className="w-full min-w-[56rem] text-sm">
                             <thead>
                                 <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
-                                    <th className="px-5 py-3 font-medium">
-                                        Kode / Barang
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
-                                        Dilelang Sejak
-                                    </th>
-                                    <th className="px-5 py-3 text-right font-medium">
-                                        Nilai Pinjaman
-                                    </th>
-                                    <th className="px-5 py-3 text-right font-medium">
-                                        Nilai Jual
-                                    </th>
-                                    <th className="px-5 py-3 text-right font-medium">
-                                        Untung / Rugi
-                                    </th>
+                                    {sortHead('Kode / Barang', 'kode')}
+                                    {sortHead('Dilelang Sejak', 'auctioned')}
+                                    {sortHead(
+                                        'Nilai Pinjaman',
+                                        'principal',
+                                        'right',
+                                    )}
+                                    {sortHead('Nilai Jual', 'sale', 'right')}
+                                    {sortHead('Untung / Rugi', 'net', 'right')}
                                 </tr>
                             </thead>
                             <tbody className="divide-y">

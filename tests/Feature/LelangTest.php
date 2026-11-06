@@ -134,3 +134,25 @@ test('the lelang report lists only auctioned items', function () {
             ->has('transactions', 1),
         );
 });
+
+test('the lelang report lists the latest auction first, not the newest pawn', function () {
+    $olderPawn = lelangTx('LELANG');
+    $olderPawn->events()->create([
+        'type' => 'auctioned', 'event_date' => '2026-10-27', 'title' => 'Ditandai untuk lelang',
+    ]);
+
+    $newerPawn = $olderPawn->replicate()->fill([
+        'code' => 'GCG-20260901-0001', 'start_date' => '2026-09-01', 'due_date' => '2026-09-16',
+    ]);
+    $newerPawn->save();
+    $newerPawn->events()->create([
+        'type' => 'auctioned', 'event_date' => '2026-09-29', 'title' => 'Ditandai untuk lelang',
+    ]);
+
+    $this->actingAs(User::factory()->owner()->create())
+        ->get('/laporan/lelang')
+        ->assertInertia(fn (Assert $page) => $page
+            ->where('transactions.0.id', $olderPawn->code)
+            ->where('transactions.1.id', $newerPawn->code),
+        );
+});

@@ -405,11 +405,29 @@ class LaporanController extends Controller
             ->forActiveStore()
             ->where('status', 'LELANG')
             ->orderByDesc('start_date')
-            ->get();
+            ->get()
+            // Latest auction first; same-day ties keep the newest pawn on top.
+            ->sortByDesc(fn (Transaction $t) => $this->auctionedOn($t))
+            ->values();
 
         return Inertia::render('laporan/lelang', [
             'transactions' => TransactionResource::collection($items),
         ]);
+    }
+
+    /**
+     * When the item was put up for auction: its latest auction mark (not a
+     * sale, which carries an amount), else its due date. Mirrors
+     * `auctionedOn()` in pages/laporan/lelang.tsx.
+     */
+    private function auctionedOn(Transaction $transaction): string
+    {
+        $mark = $transaction->events
+            ->filter(fn (TransactionEvent $e) => $e->type === 'auctioned' && ! $e->amount)
+            ->sortBy('event_date')
+            ->last();
+
+        return ($mark?->event_date ?? $transaction->due_date)->toDateString();
     }
 
     public function cetak(Request $request): Response

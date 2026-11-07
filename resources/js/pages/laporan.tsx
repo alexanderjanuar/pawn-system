@@ -19,6 +19,7 @@ import { DonutChart } from '@/components/gadai/donut-chart';
 import { IncomeInfo } from '@/components/gadai/income-info';
 import { PageHeader } from '@/components/gadai/page-header';
 import { PetugasLink } from '@/components/petugas-link';
+import { SortableHead } from '@/components/sortable-head';
 import { StatusBadge } from '@/components/status-badge';
 import { TablePagination } from '@/components/table-pagination';
 import { Button } from '@/components/ui/button';
@@ -30,10 +31,13 @@ import {
     DialogTitle,
 } from '@/components/ui/dialog';
 import { usePagination } from '@/hooks/use-pagination';
+import { byNumber, byText, useSort } from '@/hooks/use-sort';
+import type { SortColumn } from '@/hooks/use-sort';
 import { formatDate, formatRupiah } from '@/lib/format';
 import { STATUS_META, STATUS_ORDER } from '@/lib/gadai';
 import { buildReport } from '@/lib/report';
-import { countByStatus } from '@/lib/selectors';
+import type { ClerkRow } from '@/lib/report';
+import { compareByEntry, countByStatus } from '@/lib/selectors';
 import { cn, initials } from '@/lib/utils';
 import type { Transaction } from '@/types/gadai';
 
@@ -88,6 +92,55 @@ type CardData = {
     tone?: string;
     highlight?: boolean;
     info?: ReactNode;
+};
+
+type FeeSortKey = 'waktu' | 'kode' | 'customer' | 'kind' | 'clerk' | 'amount';
+
+const FEE_SORT_COLUMNS: Record<FeeSortKey, SortColumn<FeeIncomeEntry>> = {
+    // Same order as the server: payment date, then entry order.
+    waktu: {
+        compare: (a, b) => a.date.localeCompare(b.date) || a.id - b.id,
+        firstDir: 'desc',
+    },
+    kode: { compare: byText((e) => e.code), isBlank: (e) => e.code === null },
+    customer: { compare: byText((e) => e.customer) },
+    kind: { compare: byText((e) => e.kind) },
+    clerk: { compare: byText((e) => e.clerk) },
+    amount: { compare: byNumber((e) => e.amount), firstDir: 'desc' },
+};
+
+type ClerkSortKey = 'clerk' | 'count' | 'dana' | 'biaya';
+
+const CLERK_SORT_COLUMNS: Record<ClerkSortKey, SortColumn<ClerkRow>> = {
+    clerk: { compare: byText((c) => c.clerk) },
+    count: { compare: byNumber((c) => c.count), firstDir: 'desc' },
+    dana: { compare: byNumber((c) => c.dana), firstDir: 'desc' },
+    biaya: { compare: byNumber((c) => c.biaya), firstDir: 'desc' },
+};
+
+const byStatus = (a: Transaction, b: Transaction) =>
+    STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status);
+
+type RincianSortKey =
+    'kode' | 'customer' | 'device' | 'status' | 'principal' | 'fee';
+
+const RINCIAN_SORT_COLUMNS: Record<RincianSortKey, SortColumn<Transaction>> = {
+    kode: { compare: compareByEntry, firstDir: 'desc' },
+    customer: { compare: byText((t) => t.customer.name) },
+    device: { compare: byText((t) => t.device.name) },
+    status: { compare: byStatus },
+    principal: { compare: byNumber((t) => t.principal), firstDir: 'desc' },
+    fee: { compare: byNumber((t) => t.fee), firstDir: 'desc' },
+};
+
+type ClerkTxSortKey = 'kode' | 'tanggal' | 'customer' | 'status' | 'principal';
+
+const CLERK_TX_SORT_COLUMNS: Record<ClerkTxSortKey, SortColumn<Transaction>> = {
+    kode: { compare: byText((t) => t.id), firstDir: 'desc' },
+    tanggal: { compare: compareByEntry, firstDir: 'desc' },
+    customer: { compare: byText((t) => t.customer.name) },
+    status: { compare: byStatus },
+    principal: { compare: byNumber((t) => t.principal), firstDir: 'desc' },
 };
 
 /** Small heading above a group of stat cards, with an optional period chip. */
@@ -177,8 +230,20 @@ export default function Laporan({
     const report = useMemo(() => buildReport(transactions), [transactions]);
 
     const [activeClerk, setActiveClerk] = useState<string | null>(null);
-    const rincian = usePagination(transactions, 10);
-    const feeRincian = usePagination(feeIncome.entries, 10);
+    const rincianSort = useSort(transactions, RINCIAN_SORT_COLUMNS, {
+        key: 'kode',
+        dir: 'desc',
+    });
+    const rincian = usePagination(rincianSort.rows, 10);
+    const feeSort = useSort(feeIncome.entries, FEE_SORT_COLUMNS, {
+        key: 'waktu',
+        dir: 'desc',
+    });
+    const feeRincian = usePagination(feeSort.rows, 10);
+    const clerkSort = useSort(report.clerks, CLERK_SORT_COLUMNS, {
+        key: 'clerk',
+        dir: 'asc',
+    });
 
     const statusSegments = report.perStatus.map((row) => ({
         label: STATUS_META[row.status].label,
@@ -528,24 +593,49 @@ export default function Laporan({
                         <table className="w-full min-w-[46rem] text-sm">
                             <thead>
                                 <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
-                                    <th className="px-5 py-3 font-medium">
+                                    <SortableHead
+                                        sort={feeSort}
+                                        column="waktu"
+                                        onSort={() => feeRincian.setPage(1)}
+                                    >
                                         Waktu
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={feeSort}
+                                        column="kode"
+                                        onSort={() => feeRincian.setPage(1)}
+                                    >
                                         Kode
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={feeSort}
+                                        column="customer"
+                                        onSort={() => feeRincian.setPage(1)}
+                                    >
                                         Pelanggan
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={feeSort}
+                                        column="kind"
+                                        onSort={() => feeRincian.setPage(1)}
+                                    >
                                         Jenis
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={feeSort}
+                                        column="clerk"
+                                        onSort={() => feeRincian.setPage(1)}
+                                    >
                                         Petugas
-                                    </th>
-                                    <th className="px-5 py-3 text-right font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={feeSort}
+                                        column="amount"
+                                        align="right"
+                                        onSort={() => feeRincian.setPage(1)}
+                                    >
                                         Bunga
-                                    </th>
+                                    </SortableHead>
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
@@ -671,23 +761,38 @@ export default function Laporan({
                         <table className="w-full min-w-[36rem] text-sm">
                             <thead>
                                 <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
-                                    <th className="px-5 py-3 font-medium">
+                                    <SortableHead
+                                        sort={clerkSort}
+                                        column="clerk"
+                                    >
                                         Petugas
-                                    </th>
-                                    <th className="px-5 py-3 text-right font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={clerkSort}
+                                        column="count"
+                                        align="right"
+                                    >
                                         Transaksi
-                                    </th>
-                                    <th className="px-5 py-3 text-right font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={clerkSort}
+                                        column="dana"
+                                        align="right"
+                                    >
                                         Dana Tersalurkan
-                                    </th>
-                                    <th className="px-5 py-3 text-right font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={clerkSort}
+                                        column="biaya"
+                                        align="right"
+                                    >
                                         Biaya Titipan
-                                    </th>
+                                    </SortableHead>
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
                                 {report.clerks.length > 0 ? (
-                                    report.clerks.map((c) => (
+                                    clerkSort.rows.map((c) => (
                                         <tr
                                             key={c.clerk}
                                             onClick={() =>
@@ -755,24 +860,50 @@ export default function Laporan({
                         <table className="w-full min-w-[52rem] text-sm">
                             <thead>
                                 <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
-                                    <th className="px-5 py-3 font-medium">
+                                    <SortableHead
+                                        sort={rincianSort}
+                                        column="kode"
+                                        onSort={() => rincian.setPage(1)}
+                                    >
                                         Kode
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={rincianSort}
+                                        column="customer"
+                                        onSort={() => rincian.setPage(1)}
+                                    >
                                         Pelanggan
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={rincianSort}
+                                        column="device"
+                                        onSort={() => rincian.setPage(1)}
+                                    >
                                         Barang
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={rincianSort}
+                                        column="status"
+                                        onSort={() => rincian.setPage(1)}
+                                    >
                                         Status
-                                    </th>
-                                    <th className="px-5 py-3 text-right font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={rincianSort}
+                                        column="principal"
+                                        align="right"
+                                        onSort={() => rincian.setPage(1)}
+                                    >
                                         Dana
-                                    </th>
-                                    <th className="px-5 py-3 text-right font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={rincianSort}
+                                        column="fee"
+                                        align="right"
+                                        onSort={() => rincian.setPage(1)}
+                                    >
                                         Biaya
-                                    </th>
+                                    </SortableHead>
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
@@ -859,6 +990,11 @@ function ClerkDetailDialog({
         [clerk, transactions],
     );
 
+    const sort = useSort(txs, CLERK_TX_SORT_COLUMNS, {
+        key: 'tanggal',
+        dir: 'desc',
+    });
+
     const dana = txs.reduce((s, t) => s + t.principal, 0);
     const biaya = txs.reduce((s, t) => s + t.fee, 0);
     const avg = txs.length ? Math.round(dana / txs.length) : 0;
@@ -941,26 +1077,49 @@ function ClerkDetailDialog({
                     <table className="w-full min-w-[34rem] text-sm">
                         <thead className="sticky top-0 z-10 bg-muted/80 backdrop-blur">
                             <tr className="text-left text-xs tracking-wide text-muted-foreground uppercase">
-                                <th className="px-3 py-2 font-medium">Kode</th>
-                                <th className="px-3 py-2 font-medium">
+                                <SortableHead
+                                    sort={sort}
+                                    column="kode"
+                                    className="px-3 py-2"
+                                >
+                                    Kode
+                                </SortableHead>
+                                <SortableHead
+                                    sort={sort}
+                                    column="tanggal"
+                                    className="px-3 py-2"
+                                >
                                     Tanggal
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </SortableHead>
+                                <SortableHead
+                                    sort={sort}
+                                    column="customer"
+                                    className="px-3 py-2"
+                                >
                                     Pelanggan
-                                </th>
-                                <th className="px-3 py-2 font-medium">
+                                </SortableHead>
+                                <SortableHead
+                                    sort={sort}
+                                    column="status"
+                                    className="px-3 py-2"
+                                >
                                     Status
-                                </th>
-                                <th className="px-3 py-2 text-right font-medium">
+                                </SortableHead>
+                                <SortableHead
+                                    sort={sort}
+                                    column="principal"
+                                    align="right"
+                                    className="px-3 py-2"
+                                >
                                     Dana
-                                </th>
+                                </SortableHead>
                                 <th className="px-3 py-2">
                                     <span className="sr-only">Aksi</span>
                                 </th>
                             </tr>
                         </thead>
                         <tbody className="divide-y">
-                            {txs.map((t) => (
+                            {sort.rows.map((t) => (
                                 <tr
                                     key={t.id}
                                     onClick={() =>

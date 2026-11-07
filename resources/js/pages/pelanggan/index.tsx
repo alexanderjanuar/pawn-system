@@ -10,6 +10,7 @@ import {
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
 import { PageHeader } from '@/components/gadai/page-header';
+import { SortableHead } from '@/components/sortable-head';
 import { TablePagination } from '@/components/table-pagination';
 import { Button } from '@/components/ui/button';
 import {
@@ -25,13 +26,37 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { usePagination } from '@/hooks/use-pagination';
+import { byNumber, byText, useSort } from '@/hooks/use-sort';
+import type { SortColumn } from '@/hooks/use-sort';
 import { formatDate, formatPhone, formatRupiah } from '@/lib/format';
 import { customerStats, customerTransactions } from '@/lib/selectors';
+import type { CustomerStats } from '@/lib/selectors';
 import { cn, initials } from '@/lib/utils';
 import type { Customer, Transaction } from '@/types/gadai';
 
 /** Quick tabs above the customer table. */
 type CustomerFilter = 'all' | 'aktif' | 'tidak-aktif' | 'blacklist';
+
+type CustomerRow = { customer: Customer; stats: CustomerStats };
+type SortKey = 'name' | 'phone' | 'active' | 'running' | 'lastActivity';
+
+const SORT_COLUMNS: Record<SortKey, SortColumn<CustomerRow>> = {
+    name: { compare: byText((r) => r.customer.name) },
+    phone: { compare: byText((r) => r.customer.phone) },
+    active: { compare: byNumber((r) => r.stats.active), firstDir: 'desc' },
+    running: {
+        compare: byNumber((r) => r.stats.runningPrincipal),
+        firstDir: 'desc',
+    },
+    lastActivity: {
+        compare: byText((r) => r.stats.lastActivity),
+        firstDir: 'desc',
+        isBlank: (r) => r.stats.lastActivity === null,
+    },
+};
+
+const byCustomerCode = (a: CustomerRow, b: CustomerRow) =>
+    a.customer.id.localeCompare(b.customer.id);
 
 export default function PelangganIndex({
     customers,
@@ -91,6 +116,14 @@ export default function PelangganIndex({
         });
     }, [rows, query, filter]);
 
+    // Default: A→Z by name, the server's order.
+    const sort = useSort(
+        filtered,
+        SORT_COLUMNS,
+        { key: 'name', dir: 'asc' },
+        byCustomerCode,
+    );
+
     const {
         page,
         setPage,
@@ -101,7 +134,9 @@ export default function PelangganIndex({
         totalPages,
         from,
         to,
-    } = usePagination(filtered, 10);
+    } = usePagination(sort.rows, 10);
+
+    const resetPage = () => setPage(1);
 
     const summary = useMemo(() => {
         const withActive = rows.filter((r) => r.stats.active > 0).length;
@@ -203,21 +238,43 @@ export default function PelangganIndex({
                         <table className="w-full min-w-[46rem] text-sm">
                             <thead>
                                 <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
-                                    <th className="px-5 py-3 font-medium">
+                                    <SortableHead
+                                        sort={sort}
+                                        column="name"
+                                        onSort={resetPage}
+                                    >
                                         Pelanggan
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="phone"
+                                        onSort={resetPage}
+                                    >
                                         Kontak
-                                    </th>
-                                    <th className="px-5 py-3 text-right font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="active"
+                                        align="right"
+                                        onSort={resetPage}
+                                    >
                                         Gadai Aktif
-                                    </th>
-                                    <th className="px-5 py-3 text-right font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="running"
+                                        align="right"
+                                        onSort={resetPage}
+                                    >
                                         Dana Berjalan
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="lastActivity"
+                                        onSort={resetPage}
+                                    >
                                         Aktivitas Terakhir
-                                    </th>
+                                    </SortableHead>
                                 </tr>
                             </thead>
                             <tbody className="divide-y">

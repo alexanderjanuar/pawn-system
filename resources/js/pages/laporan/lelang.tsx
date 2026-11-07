@@ -1,19 +1,15 @@
 import { Head, Link, usePage } from '@inertiajs/react';
-import {
-    ArrowDown,
-    ArrowLeft,
-    ArrowUp,
-    ArrowUpDown,
-    Coins,
-    Gavel,
-    PackageOpen,
-} from 'lucide-react';
+import { ArrowLeft, Coins, Gavel, PackageOpen } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { PageHeader } from '@/components/gadai/page-header';
+import { SortableHead } from '@/components/sortable-head';
 import { TablePagination } from '@/components/table-pagination';
 import { Button } from '@/components/ui/button';
 import { usePagination } from '@/hooks/use-pagination';
+import { byNumber, useSort } from '@/hooks/use-sort';
+import type { SortColumn } from '@/hooks/use-sort';
 import { daysUntil, formatDate, formatRupiah } from '@/lib/format';
+import { compareByEntry } from '@/lib/selectors';
 import { cn } from '@/lib/utils';
 import type { Transaction } from '@/types/gadai';
 
@@ -35,22 +31,29 @@ function auctionedOn(t: Transaction): string {
 
 type Filter = 'semua' | 'belum' | 'terjual';
 type SortKey = 'kode' | 'auctioned' | 'principal' | 'sale' | 'net';
-type SortDir = 'asc' | 'desc';
 
-const SORT_FNS: Record<SortKey, (a: Transaction, b: Transaction) => number> = {
-    // Same as Transaksi: by tanggal masuk, then exact creation time, since
-    // nota prefixes differ per store.
-    kode: (a, b) =>
-        a.startDate.localeCompare(b.startDate) ||
-        (a.createdAt ?? '').localeCompare(b.createdAt ?? ''),
-    auctioned: (a, b) => auctionedOn(a).localeCompare(auctionedOn(b)),
-    principal: (a, b) => a.principal - b.principal,
-    sale: (a, b) => (a.saleValue ?? 0) - (b.saleValue ?? 0),
-    net: (a, b) => (saleNet(a) ?? 0) - (saleNet(b) ?? 0),
+/** Unsold rows have no sale value: keep them below sold ones, not as Rp0. */
+const unsold = (t: Transaction) => t.saleValue == null;
+
+// Every column here is a date or an amount: newest/largest first.
+const SORT_COLUMNS: Record<SortKey, SortColumn<Transaction>> = {
+    kode: { compare: compareByEntry, firstDir: 'desc' },
+    auctioned: {
+        compare: (a, b) => auctionedOn(a).localeCompare(auctionedOn(b)),
+        firstDir: 'desc',
+    },
+    principal: { compare: byNumber((t) => t.principal), firstDir: 'desc' },
+    sale: {
+        compare: byNumber((t) => t.saleValue),
+        firstDir: 'desc',
+        isBlank: unsold,
+    },
+    net: { compare: byNumber(saleNet), firstDir: 'desc', isBlank: unsold },
 };
 
-/** Columns that only have a value once the sale is recorded. */
-const SALE_KEYS: SortKey[] = ['sale', 'net'];
+/** Same-day auctions: newest pawn first. */
+const newestEntryFirst = (a: Transaction, b: Transaction) =>
+    compareByEntry(b, a);
 
 export default function LaporanLelang({
     transactions,
@@ -64,86 +67,27 @@ export default function LaporanLelang({
     const [filter, setFilter] = useState<Filter>(
         landedOnBelum ? 'belum' : 'semua',
     );
-    const [sortKey, setSortKey] = useState<SortKey>('auctioned');
-    const [sortDir, setSortDir] = useState<SortDir>(
-        landedOnBelum ? 'asc' : 'desc',
+
+    const shown = useMemo(
+        () =>
+            transactions.filter((t) =>
+                filter === 'belum'
+                    ? unsold(t)
+                    : filter === 'terjual'
+                      ? !unsold(t)
+                      : true,
+            ),
+        [transactions, filter],
     );
 
-    const shown = useMemo(() => {
-        const dir = sortDir === 'asc' ? 1 : -1;
-        const list = transactions.filter((t) =>
-            filter === 'belum'
-                ? t.saleValue == null
-                : filter === 'terjual'
-                  ? t.saleValue != null
-                  : true,
-        );
-
-        return list.sort(
-            (a, b) =>
-                // Unsold rows have no sale value: keep them below sold ones
-                // in either direction instead of counting them as Rp0.
-                (SALE_KEYS.includes(sortKey)
-                    ? Number(a.saleValue == null) - Number(b.saleValue == null)
-                    : 0) ||
-                SORT_FNS[sortKey](a, b) * dir ||
-                SORT_FNS.kode(b, a),
-        );
-    }, [transactions, filter, sortKey, sortDir]);
-
-    const rincian = usePagination(shown, 10);
-
-    const toggleSort = (key: SortKey) => {
-        if (sortKey === key) {
-            setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-        } else {
-            setSortKey(key);
-            // Every column here is a date or an amount: newest/largest first.
-            setSortDir('desc');
-        }
-
-        rincian.setPage(1);
-    };
-
-    const sortHead = (label: string, key: SortKey, align?: 'right') => {
-        const active = sortKey === key;
-        const Icon = active
-            ? sortDir === 'asc'
-                ? ArrowUp
-                : ArrowDown
-            : ArrowUpDown;
-
-        return (
-            <th
-                aria-sort={
-                    active
-                        ? sortDir === 'asc'
-                            ? 'ascending'
-                            : 'descending'
-                        : undefined
-                }
-                className={cn('px-5 py-3', align === 'right' && 'text-right')}
-            >
-                <button
-                    type="button"
-                    onClick={() => toggleSort(key)}
-                    className={cn(
-                        'inline-flex items-center gap-1 font-medium tracking-wide uppercase transition-colors hover:text-foreground',
-                        active && 'text-foreground',
-                        align === 'right' && 'flex-row-reverse',
-                    )}
-                >
-                    {label}
-                    <Icon
-                        className={cn(
-                            'size-3',
-                            active ? 'opacity-100' : 'opacity-40',
-                        )}
-                    />
-                </button>
-            </th>
-        );
-    };
+    const sort = useSort(
+        shown,
+        SORT_COLUMNS,
+        { key: 'auctioned', dir: landedOnBelum ? 'asc' : 'desc' },
+        newestEntryFirst,
+    );
+    const rincian = usePagination(sort.rows, 10);
+    const resetPage = () => rincian.setPage(1);
 
     const totals = useMemo(() => {
         let pinjaman = 0;
@@ -346,15 +290,44 @@ export default function LaporanLelang({
                         <table className="w-full min-w-[56rem] text-sm">
                             <thead>
                                 <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
-                                    {sortHead('Kode / Barang', 'kode')}
-                                    {sortHead('Dilelang Sejak', 'auctioned')}
-                                    {sortHead(
-                                        'Nilai Pinjaman',
-                                        'principal',
-                                        'right',
-                                    )}
-                                    {sortHead('Nilai Jual', 'sale', 'right')}
-                                    {sortHead('Untung / Rugi', 'net', 'right')}
+                                    <SortableHead
+                                        sort={sort}
+                                        column="kode"
+                                        onSort={resetPage}
+                                    >
+                                        Kode / Barang
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="auctioned"
+                                        onSort={resetPage}
+                                    >
+                                        Dilelang Sejak
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="principal"
+                                        align="right"
+                                        onSort={resetPage}
+                                    >
+                                        Nilai Pinjaman
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="sale"
+                                        align="right"
+                                        onSort={resetPage}
+                                    >
+                                        Nilai Jual
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="net"
+                                        align="right"
+                                        onSort={resetPage}
+                                    >
+                                        Untung / Rugi
+                                    </SortableHead>
                                 </tr>
                             </thead>
                             <tbody className="divide-y">

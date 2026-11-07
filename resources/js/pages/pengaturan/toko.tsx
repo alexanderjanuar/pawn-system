@@ -2,6 +2,7 @@ import { Head, router, useForm } from '@inertiajs/react';
 import { MoreVertical, Plus, Save, Store as StoreIcon } from 'lucide-react';
 import { useState } from 'react';
 import { PageHeader } from '@/components/gadai/page-header';
+import { SortableHead } from '@/components/sortable-head';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -22,6 +23,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { byNumber, byText, useSort } from '@/hooks/use-sort';
+import type { SortColumn } from '@/hooks/use-sort';
 import { cn } from '@/lib/utils';
 
 type Toko = {
@@ -38,9 +41,31 @@ type Toko = {
 
 type PageProps = { stores: Toko[]; suggestedCode: string };
 
+type SortKey = 'name' | 'nota' | 'transactions' | 'clerks' | 'status';
+
+const byName = byText<Toko>((t) => t.name);
+
+const SORT_COLUMNS: Record<SortKey, SortColumn<Toko>> = {
+    name: { compare: byName },
+    nota: { compare: byText((t) => t.notaPrefix) },
+    transactions: {
+        compare: byNumber((t) => t.transactionCount),
+        firstDir: 'desc',
+    },
+    clerks: { compare: byNumber((t) => t.clerkCount), firstDir: 'desc' },
+    status: { compare: (a, b) => Number(b.active) - Number(a.active) },
+};
+
 export default function KelolaToko({ stores, suggestedCode }: PageProps) {
     const [editTarget, setEditTarget] = useState<Toko | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<Toko | null>(null);
+    // Same as the server: active stores first, then by name.
+    const sort = useSort(
+        stores,
+        SORT_COLUMNS,
+        { key: 'status', dir: 'asc' },
+        byName,
+    );
 
     const toggleActive = (t: Toko) =>
         router.put(
@@ -94,7 +119,7 @@ export default function KelolaToko({ stores, suggestedCode }: PageProps) {
 
                 {/* Mobile: cards */}
                 <div className="flex flex-col gap-3 sm:hidden">
-                    {stores.map((t) => (
+                    {sort.rows.map((t) => (
                         <div
                             key={t.id}
                             className={cn(
@@ -107,7 +132,8 @@ export default function KelolaToko({ stores, suggestedCode }: PageProps) {
                                     <div
                                         className={cn(
                                             'truncate font-medium',
-                                            !t.active && 'text-muted-foreground',
+                                            !t.active &&
+                                                'text-muted-foreground',
                                         )}
                                     >
                                         {t.name}
@@ -133,29 +159,34 @@ export default function KelolaToko({ stores, suggestedCode }: PageProps) {
                         <table className="w-full min-w-[48rem] text-sm">
                             <thead>
                                 <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
-                                    <th className="px-5 py-3 font-medium">
+                                    <SortableHead sort={sort} column="name">
                                         Toko
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead sort={sort} column="nota">
                                         Nota
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="transactions"
+                                    >
                                         Transaksi
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead sort={sort} column="clerks">
                                         Petugas
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead sort={sort} column="status">
                                         Status
-                                    </th>
+                                    </SortableHead>
                                     <th className="px-5 py-3" />
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
-                                {stores.map((t) => (
+                                {sort.rows.map((t) => (
                                     <tr
                                         key={t.id}
-                                        className={cn(!t.active && 'bg-muted/20')}
+                                        className={cn(
+                                            !t.active && 'bg-muted/20',
+                                        )}
                                     >
                                         <td className="px-5 py-3">
                                             <div
@@ -169,7 +200,9 @@ export default function KelolaToko({ stores, suggestedCode }: PageProps) {
                                             </div>
                                             <div className="text-xs text-muted-foreground tabular-nums">
                                                 {t.code}
-                                                {t.address ? ` · ${t.address}` : ''}
+                                                {t.address
+                                                    ? ` · ${t.address}`
+                                                    : ''}
                                             </div>
                                         </td>
                                         <td className="px-5 py-3 tabular-nums">
@@ -299,8 +332,8 @@ function TokoFieldset({
                         </p>
                     ) : (
                         <p className="text-xs text-muted-foreground">
-                            Awalan nomor nota, mis. {form.data.nota_prefix ||
-                                'GCC'}
+                            Awalan nomor nota, mis.{' '}
+                            {form.data.nota_prefix || 'GCC'}
                             -20260802-0001
                         </p>
                     )}
@@ -417,9 +450,7 @@ function EditTokoDialog({
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Edit Toko</DialogTitle>
-                    <DialogDescription>
-                        Ubah detail cabang.
-                    </DialogDescription>
+                    <DialogDescription>Ubah detail cabang.</DialogDescription>
                 </DialogHeader>
                 <TokoFieldset form={form} />
                 <DialogFooter>

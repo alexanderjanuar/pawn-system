@@ -1,21 +1,17 @@
 import { Head, Link, router } from '@inertiajs/react';
-import {
-    ArrowDown,
-    ArrowUp,
-    ArrowUpDown,
-    PlusCircle,
-    Search,
-    SearchX,
-} from 'lucide-react';
+import { PlusCircle, Search, SearchX } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { DateRangeFilter } from '@/components/gadai/date-range-filter';
 import { PageHeader } from '@/components/gadai/page-header';
+import { SortableHead } from '@/components/sortable-head';
 import { StatusBadge } from '@/components/status-badge';
 import { TablePagination } from '@/components/table-pagination';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { usePagination } from '@/hooks/use-pagination';
+import { byNumber, byText, useSort } from '@/hooks/use-sort';
+import type { SortColumn } from '@/hooks/use-sort';
 import {
     daysUntil,
     dueLabel,
@@ -24,37 +20,26 @@ import {
     formatRupiah,
 } from '@/lib/format';
 import { STATUS_META, STATUS_ORDER } from '@/lib/gadai';
-import { countByStatus } from '@/lib/selectors';
+import { compareByEntry, countByStatus } from '@/lib/selectors';
 import { cn } from '@/lib/utils';
 import type { GadaiStatus, Transaction } from '@/types/gadai';
 
 type Filter = GadaiStatus | 'ALL';
 type SortKey = 'kode' | 'customer' | 'device' | 'principal' | 'due' | 'status';
 
-const SORT_FNS: Record<SortKey, (a: Transaction, b: Transaction) => number> = {
-    // Sort by when the transaction was made (tanggal masuk), then by exact
-    // creation time. Robust across stores whose nota codes use different
-    // prefixes, where a plain code sort would not be chronological.
-    kode: (a, b) =>
-        a.startDate.localeCompare(b.startDate) ||
-        (a.createdAt ?? '').localeCompare(b.createdAt ?? ''),
-    customer: (a, b) => a.customer.name.localeCompare(b.customer.name),
-    device: (a, b) => a.device.name.localeCompare(b.device.name),
-    principal: (a, b) => a.principal - b.principal,
-    due: (a, b) => a.dueDate.localeCompare(b.dueDate),
-    status: (a, b) =>
-        STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status),
+const SORT_COLUMNS: Record<SortKey, SortColumn<Transaction>> = {
+    kode: { compare: compareByEntry, firstDir: 'desc' },
+    customer: { compare: byText((t) => t.customer.name) },
+    device: { compare: byText((t) => t.device.name) },
+    principal: { compare: byNumber((t) => t.principal), firstDir: 'desc' },
+    due: { compare: (a, b) => a.dueDate.localeCompare(b.dueDate) },
+    status: {
+        compare: (a, b) =>
+            STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status),
+    },
 };
 
-// Text columns default A→Z; date/amount columns default newest/largest first.
-const DEFAULT_DIR: Record<SortKey, 'asc' | 'desc'> = {
-    kode: 'desc',
-    customer: 'asc',
-    device: 'asc',
-    principal: 'desc',
-    due: 'asc',
-    status: 'asc',
-};
+const byCode = (a: Transaction, b: Transaction) => a.id.localeCompare(b.id);
 
 export default function TransaksiIndex({
     transactions,
@@ -65,9 +50,6 @@ export default function TransaksiIndex({
     const [filter, setFilter] = useState<Filter>('ALL');
     const [from, setFrom] = useState('');
     const [to, setTo] = useState('');
-    // Default: newest nota first (nota number embeds the creation date).
-    const [sortKey, setSortKey] = useState<SortKey>('kode');
-    const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
     const counts = useMemo(() => countByStatus(transactions), [transactions]);
 
@@ -100,13 +82,13 @@ export default function TransaksiIndex({
         });
     }, [transactions, query, filter, from, to]);
 
-    const sorted = useMemo(() => {
-        const dir = sortDir === 'asc' ? 1 : -1;
-
-        return [...filtered].sort(
-            (a, b) => SORT_FNS[sortKey](a, b) * dir || a.id.localeCompare(b.id),
-        );
-    }, [filtered, sortKey, sortDir]);
+    // Default: newest nota first.
+    const sort = useSort(
+        filtered,
+        SORT_COLUMNS,
+        { key: 'kode', dir: 'desc' },
+        byCode,
+    );
 
     const {
         page,
@@ -118,51 +100,9 @@ export default function TransaksiIndex({
         totalPages,
         from: rangeFrom,
         to: rangeTo,
-    } = usePagination(sorted, 10);
+    } = usePagination(sort.rows, 10);
 
     const resetPage = () => setPage(1);
-
-    const toggleSort = (key: SortKey) => {
-        if (sortKey === key) {
-            setSortDir((d) => (d === 'asc' ? 'desc' : 'asc'));
-        } else {
-            setSortKey(key);
-            setSortDir(DEFAULT_DIR[key]);
-        }
-
-        resetPage();
-    };
-
-    const sortHead = (label: string, key: SortKey, align?: 'right') => {
-        const active = sortKey === key;
-        const Icon = active
-            ? sortDir === 'asc'
-                ? ArrowUp
-                : ArrowDown
-            : ArrowUpDown;
-
-        return (
-            <th className={cn('px-4 py-3', align === 'right' && 'text-right')}>
-                <button
-                    type="button"
-                    onClick={() => toggleSort(key)}
-                    className={cn(
-                        'inline-flex items-center gap-1 font-medium tracking-wide uppercase transition-colors hover:text-foreground',
-                        active && 'text-foreground',
-                        align === 'right' && 'flex-row-reverse',
-                    )}
-                >
-                    {label}
-                    <Icon
-                        className={cn(
-                            'size-3',
-                            active ? 'opacity-100' : 'opacity-40',
-                        )}
-                    />
-                </button>
-            </th>
-        );
-    };
 
     const tabs: { key: Filter; label: string; count: number }[] = [
         { key: 'ALL', label: 'Semua', count: transactions.length },
@@ -273,17 +213,56 @@ export default function TransaksiIndex({
                     <div className="overflow-x-auto">
                         <table className="w-full min-w-[52rem] text-sm">
                             <thead>
-                                <tr className="border-b bg-muted/40 text-left text-xs text-muted-foreground">
-                                    {sortHead('Kode', 'kode')}
-                                    {sortHead('Pelanggan', 'customer')}
-                                    {sortHead('Barang', 'device')}
-                                    {sortHead(
-                                        'Dana Titipan',
-                                        'principal',
-                                        'right',
-                                    )}
-                                    {sortHead('Jatuh Tempo', 'due')}
-                                    {sortHead('Status', 'status')}
+                                <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
+                                    <SortableHead
+                                        sort={sort}
+                                        column="kode"
+                                        onSort={resetPage}
+                                        className="px-4"
+                                    >
+                                        Kode
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="customer"
+                                        onSort={resetPage}
+                                        className="px-4"
+                                    >
+                                        Pelanggan
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="device"
+                                        onSort={resetPage}
+                                        className="px-4"
+                                    >
+                                        Barang
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="principal"
+                                        align="right"
+                                        onSort={resetPage}
+                                        className="px-4"
+                                    >
+                                        Dana Titipan
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="due"
+                                        onSort={resetPage}
+                                        className="px-4"
+                                    >
+                                        Jatuh Tempo
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="status"
+                                        onSort={resetPage}
+                                        className="px-4"
+                                    >
+                                        Status
+                                    </SortableHead>
                                 </tr>
                             </thead>
                             <tbody className="divide-y">

@@ -20,6 +20,7 @@ import {
     useWallets,
     WalletField,
 } from '@/components/gadai/wallet-field';
+import { SortableHead } from '@/components/sortable-head';
 import { Button } from '@/components/ui/button';
 import {
     Collapsible,
@@ -39,6 +40,8 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
+import { byNumber, byText, useSort } from '@/hooks/use-sort';
+import type { SortColumn } from '@/hooks/use-sort';
 import { formatDate, formatRupiah } from '@/lib/format';
 import { buildKasReport } from '@/lib/kas-report';
 import { cn } from '@/lib/utils';
@@ -53,6 +56,27 @@ type WalletSummary = {
     keluar: number;
     net: number;
     kasAkhir: number | null;
+};
+
+type WalletSortKey =
+    'urutan' | 'name' | 'saldoAwal' | 'masuk' | 'keluar' | 'kasAkhir';
+
+const WALLET_SORT_COLUMNS: Record<WalletSortKey, SortColumn<WalletSummary>> = {
+    // The wallets' configured order, as the server sends them (no header).
+    urutan: { compare: () => 0 },
+    name: { compare: byText((w) => w.name) },
+    saldoAwal: {
+        compare: byNumber((w) => w.saldoAwal),
+        firstDir: 'desc',
+        isBlank: (w) => w.saldoAwal === null,
+    },
+    masuk: { compare: byNumber((w) => w.masuk), firstDir: 'desc' },
+    keluar: { compare: byNumber((w) => w.keluar), firstDir: 'desc' },
+    kasAkhir: {
+        compare: byNumber((w) => w.kasAkhir),
+        firstDir: 'desc',
+        isBlank: (w) => w.kasAkhir === null,
+    },
 };
 
 export default function Kas({
@@ -223,6 +247,10 @@ function WalletBreakdown({ wallets }: { wallets: WalletSummary[] }) {
     const sum = (pick: (w: WalletSummary) => number | null) =>
         wallets.reduce((total, w) => total + (pick(w) ?? 0), 0);
     const totalAkhir = sum((w) => w.kasAkhir);
+    const sort = useSort(wallets, WALLET_SORT_COLUMNS, {
+        key: 'urutan',
+        dir: 'asc',
+    });
 
     return (
         <Collapsible
@@ -255,23 +283,41 @@ function WalletBreakdown({ wallets }: { wallets: WalletSummary[] }) {
                 <table className="w-full min-w-[38rem] text-sm">
                     <thead>
                         <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
-                            <th className="px-5 py-3 font-medium">Dompet</th>
-                            <th className="px-5 py-3 text-right font-medium">
+                            <SortableHead sort={sort} column="name">
+                                Dompet
+                            </SortableHead>
+                            <SortableHead
+                                sort={sort}
+                                column="saldoAwal"
+                                align="right"
+                            >
                                 Saldo Awal
-                            </th>
-                            <th className="px-5 py-3 text-right font-medium">
+                            </SortableHead>
+                            <SortableHead
+                                sort={sort}
+                                column="masuk"
+                                align="right"
+                            >
                                 Masuk
-                            </th>
-                            <th className="px-5 py-3 text-right font-medium">
+                            </SortableHead>
+                            <SortableHead
+                                sort={sort}
+                                column="keluar"
+                                align="right"
+                            >
                                 Keluar
-                            </th>
-                            <th className="px-5 py-3 text-right font-medium">
+                            </SortableHead>
+                            <SortableHead
+                                sort={sort}
+                                column="kasAkhir"
+                                align="right"
+                            >
                                 Kas Akhir
-                            </th>
+                            </SortableHead>
                         </tr>
                     </thead>
                     <tbody className="divide-y">
-                        {wallets.map((w) => (
+                        {sort.rows.map((w) => (
                             <tr key={w.id}>
                                 <td className="px-5 py-3 font-medium">
                                     {w.name}
@@ -424,7 +470,9 @@ function ManualEntryDialog({ period }: { period: Period }) {
                                     inputMode="numeric"
                                     value={
                                         data.amount
-                                            ? data.amount.toLocaleString('id-ID')
+                                            ? data.amount.toLocaleString(
+                                                  'id-ID',
+                                              )
                                             : ''
                                     }
                                     onChange={(e) =>
@@ -479,7 +527,10 @@ function ManualEntryDialog({ period }: { period: Period }) {
                                 <Banknote className="size-4 text-primary" />
                                 Tunai
                             </ToggleGroupItem>
-                            <ToggleGroupItem value="transfer" className="flex-1">
+                            <ToggleGroupItem
+                                value="transfer"
+                                className="flex-1"
+                            >
                                 <Landmark className="size-4 text-aktif" />
                                 Transfer
                             </ToggleGroupItem>

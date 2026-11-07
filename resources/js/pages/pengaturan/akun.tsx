@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { PageHeader } from '@/components/gadai/page-header';
+import { SortableHead } from '@/components/sortable-head';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -36,6 +37,8 @@ import {
     SelectTrigger,
     SelectValue,
 } from '@/components/ui/select';
+import { byText, useSort } from '@/hooks/use-sort';
+import type { SortColumn } from '@/hooks/use-sort';
 import { cn, initials } from '@/lib/utils';
 
 type RoleOption = { value: string; label: string };
@@ -51,6 +54,17 @@ type Account = {
     storeId: number | null;
     storeName: string | null;
     active: boolean;
+};
+
+type SortKey = 'name' | 'role' | 'status';
+
+const byName = byText<Account>((u) => u.name);
+
+const SORT_COLUMNS: Record<SortKey, SortColumn<Account>> = {
+    name: { compare: byName },
+    // Labels A→Z (Admin, Pemilik, Petugas) is also the Role enum order.
+    role: { compare: byText((u) => u.roleLabel) },
+    status: { compare: (a, b) => Number(b.active) - Number(a.active) },
 };
 
 type PageProps = {
@@ -69,6 +83,13 @@ export default function KelolaAkun({
     const [editTarget, setEditTarget] = useState<Account | null>(null);
     const [passwordTarget, setPasswordTarget] = useState<Account | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<Account | null>(null);
+    // Same as the server: active accounts first, then by name.
+    const sort = useSort(
+        users,
+        SORT_COLUMNS,
+        { key: 'status', dir: 'asc' },
+        byName,
+    );
 
     const toggleActive = (u: Account) =>
         router.put(
@@ -104,7 +125,7 @@ export default function KelolaAkun({
 
                 {/* Mobile: cards */}
                 <div className="flex flex-col gap-3 sm:hidden">
-                    {users.map((u) => (
+                    {sort.rows.map((u) => (
                         <div
                             key={u.id}
                             className={cn(
@@ -154,20 +175,20 @@ export default function KelolaAkun({
                         <table className="w-full min-w-[42rem] text-sm">
                             <thead>
                                 <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
-                                    <th className="px-5 py-3 font-medium">
+                                    <SortableHead sort={sort} column="name">
                                         Akun
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead sort={sort} column="role">
                                         Peran
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead sort={sort} column="status">
                                         Status
-                                    </th>
+                                    </SortableHead>
                                     <th className="px-5 py-3" />
                                 </tr>
                             </thead>
                             <tbody className="divide-y">
-                                {users.map((u) => (
+                                {sort.rows.map((u) => (
                                     <tr
                                         key={u.id}
                                         className={cn(

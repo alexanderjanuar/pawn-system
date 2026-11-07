@@ -11,6 +11,7 @@ import {
 } from '@/components/gadai/wallet-field';
 import { MissingFields } from '@/components/missing-fields';
 import { PetugasLink } from '@/components/petugas-link';
+import { SortableHead } from '@/components/sortable-head';
 import { TablePagination } from '@/components/table-pagination';
 import { Button } from '@/components/ui/button';
 import {
@@ -34,6 +35,8 @@ import {
 } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { usePagination } from '@/hooks/use-pagination';
+import { byNumber, byText, useSort } from '@/hooks/use-sort';
+import type { SortColumn } from '@/hooks/use-sort';
 import { formatDate, formatRupiah } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -64,6 +67,26 @@ type PageProps = {
 
 /** Sentinel for "every category"; Radix Select cannot hold an empty value. */
 const ALL = '__semua__';
+
+type SortKey = 'date' | 'description' | 'category' | 'wallet' | 'by' | 'amount';
+
+/** Same order as the server: by date, then by entry. */
+const byEntry = (a: Expense, b: Expense) =>
+    a.date.localeCompare(b.date) || a.id - b.id;
+
+const SORT_COLUMNS: Record<SortKey, SortColumn<Expense>> = {
+    date: { compare: byEntry, firstDir: 'desc' },
+    description: { compare: byText((e) => e.description) },
+    category: { compare: byText((e) => e.categoryLabel) },
+    wallet: {
+        compare: byText((e) => e.walletName),
+        isBlank: (e) => e.walletName === null,
+    },
+    by: { compare: byText((e) => e.by), isBlank: (e) => e.by === null },
+    amount: { compare: byNumber((e) => e.amount), firstDir: 'desc' },
+};
+
+const newestFirst = (a: Expense, b: Expense) => byEntry(b, a);
 
 export default function BiayaOperasional({
     expenses,
@@ -96,6 +119,13 @@ export default function BiayaOperasional({
     const filteredTotal = filtered.reduce((sum, e) => sum + e.amount, 0);
     const narrowed = query.trim() !== '' || category !== ALL;
 
+    const sort = useSort(
+        filtered,
+        SORT_COLUMNS,
+        { key: 'date', dir: 'desc' },
+        newestFirst,
+    );
+
     const {
         page,
         setPage,
@@ -106,7 +136,9 @@ export default function BiayaOperasional({
         totalPages,
         from,
         to,
-    } = usePagination(filtered, 10);
+    } = usePagination(sort.rows, 10);
+
+    const resetPage = () => setPage(1);
 
     const periodLabel =
         period.from || period.to
@@ -270,24 +302,49 @@ export default function BiayaOperasional({
                         <table className="w-full min-w-[52rem] text-sm">
                             <thead>
                                 <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
-                                    <th className="px-5 py-3 font-medium">
+                                    <SortableHead
+                                        sort={sort}
+                                        column="date"
+                                        onSort={resetPage}
+                                    >
                                         Tanggal
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="description"
+                                        onSort={resetPage}
+                                    >
                                         Keterangan
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="category"
+                                        onSort={resetPage}
+                                    >
                                         Kategori
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="wallet"
+                                        onSort={resetPage}
+                                    >
                                         Dompet
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="by"
+                                        onSort={resetPage}
+                                    >
                                         Dicatat oleh
-                                    </th>
-                                    <th className="px-5 py-3 text-right font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="amount"
+                                        align="right"
+                                        onSort={resetPage}
+                                    >
                                         Nominal
-                                    </th>
+                                    </SortableHead>
                                     <th className="w-12 px-3 py-3">
                                         <span className="sr-only">Aksi</span>
                                     </th>

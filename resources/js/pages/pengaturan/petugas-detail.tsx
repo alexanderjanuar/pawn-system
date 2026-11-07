@@ -15,6 +15,7 @@ import {
 import { useState } from 'react';
 import { BarChart } from '@/components/gadai/bar-chart';
 import { DonutChart } from '@/components/gadai/donut-chart';
+import { SortableHead } from '@/components/sortable-head';
 import { StatusBadge } from '@/components/status-badge';
 import { TablePagination } from '@/components/table-pagination';
 import { Button } from '@/components/ui/button';
@@ -36,8 +37,10 @@ import {
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { usePagination } from '@/hooks/use-pagination';
+import { byNumber, byText, useSort } from '@/hooks/use-sort';
+import type { SortColumn } from '@/hooks/use-sort';
 import { formatDate, formatRupiah } from '@/lib/format';
-import { STATUS_META } from '@/lib/gadai';
+import { STATUS_META, STATUS_ORDER } from '@/lib/gadai';
 import { cn, initials } from '@/lib/utils';
 import type { GadaiStatus } from '@/types/gadai';
 
@@ -68,6 +71,25 @@ type ClerkTransaction = {
     detailUrl: string;
 };
 
+type SortKey = 'code' | 'date' | 'customer' | 'status' | 'principal';
+
+const byCode = byText<ClerkTransaction>((t) => t.id);
+
+const SORT_COLUMNS: Record<SortKey, SortColumn<ClerkTransaction>> = {
+    code: { compare: byCode, firstDir: 'desc' },
+    date: { compare: (a, b) => a.date.localeCompare(b.date), firstDir: 'desc' },
+    customer: { compare: byText((t) => t.customer) },
+    status: {
+        compare: (a, b) =>
+            STATUS_ORDER.indexOf(a.status) - STATUS_ORDER.indexOf(b.status),
+    },
+    principal: { compare: byNumber((t) => t.principal), firstDir: 'desc' },
+};
+
+/** Same-day transactions: newest nota first. */
+const newestCodeFirst = (a: ClerkTransaction, b: ClerkTransaction) =>
+    byCode(b, a);
+
 type PageProps = {
     petugas: Petugas;
     stats: Stats;
@@ -95,7 +117,10 @@ export default function PetugasDetail({
 
     const figures = [
         { label: 'Total Transaksi', value: String(stats.total) },
-        { label: 'Dana Tersalurkan', value: formatRupiah(stats.totalPrincipal) },
+        {
+            label: 'Dana Tersalurkan',
+            value: formatRupiah(stats.totalPrincipal),
+        },
         {
             label: 'Biaya Titipan',
             value: formatRupiah(stats.totalFee),
@@ -257,10 +282,7 @@ export default function PetugasDetail({
 
                         {/* Aside */}
                         <div className="flex flex-col gap-5">
-                            <Card
-                                icon={ChartPie}
-                                title="Transaksi per Status"
-                            >
+                            <Card icon={ChartPie} title="Transaksi per Status">
                                 <DonutChart
                                     segments={segments}
                                     centerLabel="Transaksi"
@@ -324,6 +346,13 @@ function TransactionsTable({
 }: {
     transactions: ClerkTransaction[];
 }) {
+    // Same as the server: newest tanggal masuk first.
+    const sort = useSort(
+        transactions,
+        SORT_COLUMNS,
+        { key: 'date', dir: 'desc' },
+        newestCodeFirst,
+    );
     const {
         page,
         setPage,
@@ -334,7 +363,8 @@ function TransactionsTable({
         totalPages,
         from,
         to,
-    } = usePagination(transactions, 10);
+    } = usePagination(sort.rows, 10);
+    const resetPage = () => setPage(1);
 
     return (
         <>
@@ -342,13 +372,42 @@ function TransactionsTable({
                 <table className="w-full min-w-[44rem] text-sm">
                     <thead>
                         <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
-                            <th className="px-5 py-3 font-medium">Kode</th>
-                            <th className="px-5 py-3 font-medium">Tanggal</th>
-                            <th className="px-5 py-3 font-medium">Pelanggan</th>
-                            <th className="px-5 py-3 font-medium">Status</th>
-                            <th className="px-5 py-3 text-right font-medium">
+                            <SortableHead
+                                sort={sort}
+                                column="code"
+                                onSort={resetPage}
+                            >
+                                Kode
+                            </SortableHead>
+                            <SortableHead
+                                sort={sort}
+                                column="date"
+                                onSort={resetPage}
+                            >
+                                Tanggal
+                            </SortableHead>
+                            <SortableHead
+                                sort={sort}
+                                column="customer"
+                                onSort={resetPage}
+                            >
+                                Pelanggan
+                            </SortableHead>
+                            <SortableHead
+                                sort={sort}
+                                column="status"
+                                onSort={resetPage}
+                            >
+                                Status
+                            </SortableHead>
+                            <SortableHead
+                                sort={sort}
+                                column="principal"
+                                onSort={resetPage}
+                                align="right"
+                            >
                                 Dana
-                            </th>
+                            </SortableHead>
                         </tr>
                     </thead>
                     <tbody className="divide-y">
@@ -569,8 +628,11 @@ function DeleteDialog({
                             {petugas.name}
                         </span>{' '}
                         dari daftar? Nama pada{' '}
-                        {total > 0 ? `${total} transaksi lama` : 'transaksi lama'}{' '}
-                        tetap tersimpan, hanya tidak lagi muncul sebagai pilihan.
+                        {total > 0
+                            ? `${total} transaksi lama`
+                            : 'transaksi lama'}{' '}
+                        tetap tersimpan, hanya tidak lagi muncul sebagai
+                        pilihan.
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>

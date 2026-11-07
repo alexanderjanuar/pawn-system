@@ -2,6 +2,7 @@ import { Link, router } from '@inertiajs/react';
 import { ArrowLeftRight, Banknote, Landmark, Trash2 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { PetugasLink } from '@/components/petugas-link';
+import { SortableHead } from '@/components/sortable-head';
 import { TablePagination } from '@/components/table-pagination';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,6 +23,8 @@ import {
 } from '@/components/ui/select';
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group';
 import { usePagination } from '@/hooks/use-pagination';
+import { byNumber, byText, useSort } from '@/hooks/use-sort';
+import type { SortColumn } from '@/hooks/use-sort';
 import { formatDate, formatRupiah } from '@/lib/format';
 import { cn } from '@/lib/utils';
 
@@ -77,6 +80,65 @@ const CASH_KIND_LABEL: Record<CashKind, string> = {
     manual: 'Manual',
 };
 
+const METHOD_LABEL: Record<PaymentMethod, string> = {
+    cash: 'Tunai',
+    transfer: 'Transfer',
+};
+
+/**
+ * The method a row shows: manual entries are cash unless marked transfer,
+ * incoming movements show what was picked, outgoing ones show none.
+ */
+function shownMethod(e: CashEntry): PaymentMethod | null {
+    if (e.source === 'manual') {
+        return e.method === 'transfer' ? 'transfer' : 'cash';
+    }
+
+    return e.direction === 'in' ? e.method : null;
+}
+
+/** Date + time as the server orders it (no time sorts first in its day). */
+const movedAt = (e: CashEntry) => `${e.date} ${e.time ?? ''}`;
+
+type SortKey =
+    | 'waktu'
+    | 'kode'
+    | 'customer'
+    | 'kind'
+    | 'wallet'
+    | 'method'
+    | 'clerk'
+    | 'amount';
+
+const SORT_COLUMNS: Record<SortKey, SortColumn<CashEntry>> = {
+    waktu: {
+        compare: (a, b) =>
+            movedAt(a) < movedAt(b) ? -1 : movedAt(a) > movedAt(b) ? 1 : 0,
+        firstDir: 'desc',
+    },
+    kode: { compare: byText((e) => e.code), isBlank: (e) => e.code === null },
+    customer: { compare: byText((e) => e.customer) },
+    kind: { compare: byText((e) => CASH_KIND_LABEL[e.kind]) },
+    wallet: {
+        compare: byText((e) => e.walletName),
+        isBlank: (e) => e.walletName === null,
+    },
+    method: {
+        compare: byText((e) => {
+            const method = shownMethod(e);
+
+            return method ? METHOD_LABEL[method] : null;
+        }),
+        isBlank: (e) => shownMethod(e) === null,
+    },
+    clerk: { compare: byText((e) => e.clerk) },
+    // Signed, so money in ranks above money out.
+    amount: {
+        compare: byNumber((e) => (e.direction === 'in' ? e.amount : -e.amount)),
+        firstDir: 'desc',
+    },
+};
+
 /**
  * Money in/out for a period plus the itemised movements, so a clerk can tick
  * each one against the physical cash drawer.
@@ -99,7 +161,10 @@ export function CashFlowPanel({
                 : cashFlow.entries.filter((e) => e.direction === view),
         [cashFlow.entries, view],
     );
-    const kas = usePagination(filtered, 10);
+    // Newest first, as the server sends it.
+    const sort = useSort(filtered, SORT_COLUMNS, { key: 'waktu', dir: 'desc' });
+    const kas = usePagination(sort.rows, 10);
+    const resetPage = () => kas.setPage(1);
 
     return (
         <section className="overflow-hidden rounded-xl border bg-card shadow-sm">
@@ -231,16 +296,63 @@ export function CashFlowPanel({
                 <table className="w-full min-w-[46rem] text-sm">
                     <thead>
                         <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
-                            <th className="px-5 py-3 font-medium">Waktu</th>
-                            <th className="px-5 py-3 font-medium">Kode</th>
-                            <th className="px-5 py-3 font-medium">Pelanggan</th>
-                            <th className="px-5 py-3 font-medium">Jenis</th>
-                            <th className="px-5 py-3 font-medium">Dompet</th>
-                            <th className="px-5 py-3 font-medium">Metode</th>
-                            <th className="px-5 py-3 font-medium">Petugas</th>
-                            <th className="px-5 py-3 text-right font-medium">
+                            <SortableHead
+                                sort={sort}
+                                column="waktu"
+                                onSort={resetPage}
+                            >
+                                Waktu
+                            </SortableHead>
+                            <SortableHead
+                                sort={sort}
+                                column="kode"
+                                onSort={resetPage}
+                            >
+                                Kode
+                            </SortableHead>
+                            <SortableHead
+                                sort={sort}
+                                column="customer"
+                                onSort={resetPage}
+                            >
+                                Pelanggan
+                            </SortableHead>
+                            <SortableHead
+                                sort={sort}
+                                column="kind"
+                                onSort={resetPage}
+                            >
+                                Jenis
+                            </SortableHead>
+                            <SortableHead
+                                sort={sort}
+                                column="wallet"
+                                onSort={resetPage}
+                            >
+                                Dompet
+                            </SortableHead>
+                            <SortableHead
+                                sort={sort}
+                                column="method"
+                                onSort={resetPage}
+                            >
+                                Metode
+                            </SortableHead>
+                            <SortableHead
+                                sort={sort}
+                                column="clerk"
+                                onSort={resetPage}
+                            >
+                                Petugas
+                            </SortableHead>
+                            <SortableHead
+                                sort={sort}
+                                column="amount"
+                                align="right"
+                                onSort={resetPage}
+                            >
                                 Jumlah
-                            </th>
+                            </SortableHead>
                         </tr>
                     </thead>
                     <tbody className="divide-y">

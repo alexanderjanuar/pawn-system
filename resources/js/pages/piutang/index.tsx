@@ -6,6 +6,7 @@ import { PageHeader } from '@/components/gadai/page-header';
 import { MissingFields } from '@/components/missing-fields';
 import { PiutangPaymentDialog } from '@/components/piutang-payment-dialog';
 import { PiutangReminderDialog } from '@/components/piutang-reminder-dialog';
+import { SortableHead } from '@/components/sortable-head';
 import { TablePagination } from '@/components/table-pagination';
 import { Button } from '@/components/ui/button';
 import {
@@ -22,6 +23,8 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { usePagination } from '@/hooks/use-pagination';
+import { byNumber, byText, useSort } from '@/hooks/use-sort';
+import type { SortColumn } from '@/hooks/use-sort';
 import { formatDate, formatRupiah, TODAY } from '@/lib/format';
 import type { NextDue } from '@/lib/reminder';
 import { cn } from '@/lib/utils';
@@ -55,6 +58,24 @@ type PageProps = {
 };
 
 type Filter = 'all' | 'berjalan' | 'telat' | 'lunas';
+type SortKey = 'kode' | 'debtor' | 'device' | 'price' | 'remaining' | 'status';
+
+/** Same order as the server: by date, then by entry. */
+const byEntry = (a: Row, b: Row) => a.date.localeCompare(b.date) || a.id - b.id;
+
+/** Status follows the filter tabs: Berjalan, Telat, Lunas. */
+const statusRank = (p: Row) => (p.status === 'lunas' ? 2 : p.late ? 1 : 0);
+
+const SORT_COLUMNS: Record<SortKey, SortColumn<Row>> = {
+    kode: { compare: byEntry, firstDir: 'desc' },
+    debtor: { compare: byText((p) => p.debtorName) },
+    device: { compare: byText((p) => p.deviceName) },
+    price: { compare: byNumber((p) => p.price), firstDir: 'desc' },
+    remaining: { compare: byNumber((p) => p.remaining), firstDir: 'desc' },
+    status: { compare: byNumber(statusRank) },
+};
+
+const newestFirst = (a: Row, b: Row) => byEntry(b, a);
 
 export function StatusPill({ status }: { status: PiutangStatus }) {
     return (
@@ -109,6 +130,13 @@ export default function PiutangIndex({
         });
     }, [piutangs, query, filter]);
 
+    const sort = useSort(
+        filtered,
+        SORT_COLUMNS,
+        { key: 'kode', dir: 'desc' },
+        newestFirst,
+    );
+
     const {
         page,
         setPage,
@@ -119,7 +147,9 @@ export default function PiutangIndex({
         totalPages,
         from,
         to,
-    } = usePagination(filtered, 10);
+    } = usePagination(sort.rows, 10);
+
+    const resetPage = () => setPage(1);
 
     const tabs: {
         key: Filter;
@@ -235,24 +265,50 @@ export default function PiutangIndex({
                         <table className="w-full min-w-[58rem] text-sm">
                             <thead>
                                 <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
-                                    <th className="px-5 py-3 font-medium">
+                                    <SortableHead
+                                        sort={sort}
+                                        column="kode"
+                                        onSort={resetPage}
+                                    >
                                         Kode
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="debtor"
+                                        onSort={resetPage}
+                                    >
                                         Peminjam
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="device"
+                                        onSort={resetPage}
+                                    >
                                         HP
-                                    </th>
-                                    <th className="px-5 py-3 text-right font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="price"
+                                        align="right"
+                                        onSort={resetPage}
+                                    >
                                         Total
-                                    </th>
-                                    <th className="px-5 py-3 text-right font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="remaining"
+                                        align="right"
+                                        onSort={resetPage}
+                                    >
                                         Sisa
-                                    </th>
-                                    <th className="px-5 py-3 font-medium">
+                                    </SortableHead>
+                                    <SortableHead
+                                        sort={sort}
+                                        column="status"
+                                        onSort={resetPage}
+                                    >
                                         Status
-                                    </th>
+                                    </SortableHead>
                                     <th className="px-5 py-3 text-right font-medium">
                                         Aksi
                                     </th>

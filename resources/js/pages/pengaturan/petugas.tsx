@@ -2,6 +2,7 @@ import { Head, Link, router, useForm, usePage } from '@inertiajs/react';
 import { MoreVertical, Plus, UserCog, UserPlus, Users } from 'lucide-react';
 import { useState } from 'react';
 import { PageHeader } from '@/components/gadai/page-header';
+import { SortableHead } from '@/components/sortable-head';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -22,6 +23,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { byNumber, byText, useSort } from '@/hooks/use-sort';
+import type { SortColumn } from '@/hooks/use-sort';
 import { cn, initials } from '@/lib/utils';
 
 type Petugas = {
@@ -32,11 +35,31 @@ type Petugas = {
     transactionCount: number;
 };
 
+type SortKey = 'name' | 'status' | 'transactions';
+
+const byName = byText<Petugas>((p) => p.name);
+
+const SORT_COLUMNS: Record<SortKey, SortColumn<Petugas>> = {
+    name: { compare: byName },
+    status: { compare: (a, b) => Number(b.active) - Number(a.active) },
+    transactions: {
+        compare: byNumber((p) => p.transactionCount),
+        firstDir: 'desc',
+    },
+};
+
 export default function KelolaPetugas({ petugas }: { petugas: Petugas[] }) {
     const [renameTarget, setRenameTarget] = useState<Petugas | null>(null);
     const [deleteTarget, setDeleteTarget] = useState<Petugas | null>(null);
     // Show which store each petugas belongs to only in the "all stores" view.
     const showStore = usePage().props.activeStore === 'all';
+    // Same as the server: active petugas first, then by name.
+    const sort = useSort(
+        petugas,
+        SORT_COLUMNS,
+        { key: 'status', dir: 'asc' },
+        byName,
+    );
 
     const toggleActive = (p: Petugas) =>
         router.put(
@@ -82,7 +105,7 @@ export default function KelolaPetugas({ petugas }: { petugas: Petugas[] }) {
                     <>
                         {/* Mobile: cards */}
                         <div className="flex flex-col gap-3 sm:hidden">
-                            {petugas.map((p) => (
+                            {sort.rows.map((p) => (
                                 <div
                                     key={p.id}
                                     className={cn(
@@ -126,20 +149,29 @@ export default function KelolaPetugas({ petugas }: { petugas: Petugas[] }) {
                                 <table className="w-full min-w-[36rem] text-sm">
                                     <thead>
                                         <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
-                                            <th className="px-5 py-3 font-medium">
+                                            <SortableHead
+                                                sort={sort}
+                                                column="name"
+                                            >
                                                 Nama
-                                            </th>
-                                            <th className="px-5 py-3 font-medium">
+                                            </SortableHead>
+                                            <SortableHead
+                                                sort={sort}
+                                                column="status"
+                                            >
                                                 Status
-                                            </th>
-                                            <th className="px-5 py-3 font-medium">
+                                            </SortableHead>
+                                            <SortableHead
+                                                sort={sort}
+                                                column="transactions"
+                                            >
                                                 Transaksi
-                                            </th>
+                                            </SortableHead>
                                             <th className="px-5 py-3" />
                                         </tr>
                                     </thead>
                                     <tbody className="divide-y">
-                                        {petugas.map((p) => (
+                                        {sort.rows.map((p) => (
                                             <tr
                                                 key={p.id}
                                                 className={cn(

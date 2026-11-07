@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { useState } from 'react';
 import { PageHeader } from '@/components/gadai/page-header';
+import { SortableHead } from '@/components/sortable-head';
 import { Button } from '@/components/ui/button';
 import {
     Dialog,
@@ -29,6 +30,8 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import { byNumber, byText, useSort } from '@/hooks/use-sort';
+import type { SortColumn } from '@/hooks/use-sort';
 import { cn } from '@/lib/utils';
 
 type WalletRow = {
@@ -37,6 +40,17 @@ type WalletRow = {
     isDefault: boolean;
     isActive: boolean;
     usage: number;
+};
+
+type SortKey = 'created' | 'name' | 'status' | 'usage';
+
+const SORT_COLUMNS: Record<SortKey, SortColumn<WalletRow>> = {
+    // No header: the initial order, same as the server's `sort` column
+    // (each new wallet is appended).
+    created: { compare: byNumber((w) => w.id) },
+    name: { compare: byText((w) => w.name) },
+    status: { compare: (a, b) => Number(b.isActive) - Number(a.isActive) },
+    usage: { compare: byNumber((w) => w.usage), firstDir: 'desc' },
 };
 
 export default function KelolaDompet({
@@ -48,6 +62,7 @@ export default function KelolaDompet({
 }) {
     const [editing, setEditing] = useState<WalletRow | null>(null);
     const [deleting, setDeleting] = useState<WalletRow | null>(null);
+    const sort = useSort(wallets, SORT_COLUMNS, { key: 'created', dir: 'asc' });
 
     return (
         <>
@@ -64,9 +79,15 @@ export default function KelolaDompet({
                     <table className="w-full min-w-[34rem] text-sm">
                         <thead>
                             <tr className="border-b bg-muted/40 text-left text-xs tracking-wide text-muted-foreground uppercase">
-                                <th className="px-5 py-3 font-medium">Dompet</th>
-                                <th className="px-5 py-3 font-medium">Status</th>
-                                <th className="px-5 py-3 font-medium">Dipakai</th>
+                                <SortableHead sort={sort} column="name">
+                                    Dompet
+                                </SortableHead>
+                                <SortableHead sort={sort} column="status">
+                                    Status
+                                </SortableHead>
+                                <SortableHead sort={sort} column="usage">
+                                    Dipakai
+                                </SortableHead>
                                 {canManage && (
                                     <th className="px-5 py-3 text-right font-medium">
                                         Aksi
@@ -75,7 +96,7 @@ export default function KelolaDompet({
                             </tr>
                         </thead>
                         <tbody className="divide-y">
-                            {wallets.map((w) => (
+                            {sort.rows.map((w) => (
                                 <tr key={w.id}>
                                     <td className="px-5 py-3">
                                         <span className="flex items-center gap-2 font-medium">
@@ -132,12 +153,10 @@ export default function KelolaDompet({
                                                                 router.put(
                                                                     `/pengaturan/dompet/${w.id}`,
                                                                     {
-                                                                        is_default:
-                                                                            true,
+                                                                        is_default: true,
                                                                     },
                                                                     {
-                                                                        preserveScroll:
-                                                                            true,
+                                                                        preserveScroll: true,
                                                                     },
                                                                 )
                                                             }
@@ -156,8 +175,7 @@ export default function KelolaDompet({
                                                                             !w.isActive,
                                                                     },
                                                                     {
-                                                                        preserveScroll:
-                                                                            true,
+                                                                        preserveScroll: true,
                                                                     },
                                                                 )
                                                             }

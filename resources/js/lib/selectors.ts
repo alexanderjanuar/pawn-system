@@ -25,6 +25,17 @@ export function countByStatus(txs: Transaction[]): Record<GadaiStatus, number> {
     return counts;
 }
 
+/**
+ * Chronological order (oldest first): tanggal masuk, then exact creation
+ * time. Use instead of comparing nota codes, whose prefixes differ per store.
+ */
+export function compareByEntry(a: Transaction, b: Transaction): number {
+    return (
+        a.startDate.localeCompare(b.startDate) ||
+        (a.createdAt ?? '').localeCompare(b.createdAt ?? '')
+    );
+}
+
 /** Items still "running" (money on the street): AKTIF + PERPANJANG. */
 export function runningTransactions(txs: Transaction[]): Transaction[] {
     return txs.filter((t) => t.status === 'AKTIF' || t.status === 'PERPANJANG');

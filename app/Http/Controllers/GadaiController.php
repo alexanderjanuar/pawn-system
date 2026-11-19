@@ -23,6 +23,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Inertia\Inertia;
 use Inertia\Response;
@@ -432,6 +433,15 @@ class GadaiController extends Controller
         $reason = trim((string) ($data['reason'] ?? ''));
         $feeBefore = (int) $transaction->fee;
 
+        // Snapshot taken before the redemption overwrites it, so "Batal Tebus"
+        // can put the loan back exactly as it was.
+        $previousState = [
+            'status' => $transaction->status,
+            'fee' => (int) $transaction->fee,
+            'fee_percent' => (int) $transaction->fee_percent,
+            'denda' => (int) $transaction->denda,
+        ];
+
         $transaction->update([
             'status' => 'DIAMBIL',
             'fee' => $fee,
@@ -464,6 +474,7 @@ class GadaiController extends Controller
             'amount' => $transaction->principal + $fee + $denda,
             'payment_method' => $data['payment_method'] ?? 'cash',
             'wallet_id' => $this->resolveWallet($data['wallet_id'] ?? null),
+            'previous_state' => $previousState,
         ]);
 
         $overLimit = ($adjusted && $this->exceedsDiscountLimit($feeBefore, $fee))
@@ -487,6 +498,75 @@ class GadaiController extends Controller
         );
 
         return back()->with('success', "Transaksi {$transaction->code} ditebus & diambil.");
+    }
+
+    /**
+     * Undo a redemption recorded by mistake: put the loan back to the status,
+     * fee and late fee it had before, and remove its payment record so the
+     * money leaves Kas Harian, the wallet balance and the income report.
+     */
+    public function revertRedeem(Request $request, Transaction $transaction): RedirectResponse
+    {
+        if ($transaction->status !== 'DIAMBIL' || $transaction->sold_at !== null) {
+            return back()->with('error', 'Transaksi ini tidak sedang berstatus ditebus.');
+        }
+
+        $event = $transaction->events()
+            ->where('type', 'redeemed')
+            ->latest('id')
+            ->first();
+
+        // Redemptions recorded before the snapshot existed fall back to the
+        // extension count; their fee stays as it was charged.
+        $previous = $event?->previous_state ?? [
+            'status' => $transaction->extensions > 0 ? 'PERPANJANG' : 'AKTIF',
+            'fee' => (int) $transaction->fee,
+            'fee_percent' => (int) $transaction->fee_percent,
+            'denda' => 0,
+        ];
+
+        $before = [
+            'Status' => $transaction->status,
+            'Biaya titipan' => $this->rupiah((int) $transaction->fee),
+            'Denda' => $this->rupiah((int) $transaction->denda),
+        ];
+
+        $description = 'Membatalkan tebus';
+
+        if ($event !== null) {
+            $wallet = $event->wallet_id ? Wallet::find($event->wallet_id)?->name : null;
+            $description .= ' (uang masuk '.$this->rupiah((int) $event->amount)
+                .' tanggal '.$event->event_date->format('Y-m-d')
+                .($wallet ? " di dompet {$wallet}" : '')
+                .' dihapus dari kas)';
+        }
+
+        DB::transaction(function () use ($transaction, $event, $previous, $before, $description): void {
+            $event?->delete();
+
+            $transaction->update([
+                'status' => $previous['status'],
+                'fee' => $previous['fee'],
+                'fee_percent' => $previous['fee_percent'],
+                'denda' => $previous['denda'],
+            ]);
+
+            ActivityLog::record(
+                'updated',
+                'transaction',
+                $transaction->code,
+                $transaction->customer->name,
+                $description,
+                ActivityLog::diff($before, [
+                    'Status' => $transaction->status,
+                    'Biaya titipan' => $this->rupiah((int) $transaction->fee),
+                    'Denda' => $this->rupiah((int) $transaction->denda),
+                ]),
+                true,
+            );
+        });
+
+        return back()->with('success', "Tebus {$transaction->code} dibatalkan, barang kembali berstatus gadai.");
     }
 
     public function extend(Request $request, Transaction $transaction): RedirectResponse
@@ -916,6 +996,65 @@ class GadaiController extends Controller
         );
 
         return back()->with('success', "Penjualan {$transaction->code} dicatat.");
+    }
+
+    /**
+     * Undo a sale recorded by mistake: drop its payment record so the money
+     * leaves Kas Harian, the wallet balance and the sale profit, and put the
+     * item back up for sale. Selling never changed the status, so the item
+     * stays Lelang / Tidak Diambil and can be sold again or taken off auction.
+     */
+    public function revertSale(Request $request, Transaction $transaction): RedirectResponse
+    {
+        if ($transaction->sold_at === null && $transaction->sale_value === null) {
+            return back()->with('error', 'Penjualan barang ini belum dicatat.');
+        }
+
+        // The sale is the auction record carrying money; marking an item for
+        // auction (or taking it off) never does.
+        $event = $transaction->events()
+            ->where('type', 'auctioned')
+            ->whereNotNull('amount')
+            ->latest('id')
+            ->first();
+
+        $before = [
+            'Nilai jual' => $transaction->sale_value === null ? '—' : $this->rupiah($transaction->sale_value),
+            'Tanggal terjual' => $transaction->sold_at?->format('Y-m-d') ?? '—',
+        ];
+
+        $description = $transaction->status === 'TIDAK_DIAMBIL'
+            ? 'Membatalkan penjualan barang tidak diambil'
+            : 'Membatalkan penjualan lelang';
+
+        if ($event !== null) {
+            $wallet = $event->wallet_id ? Wallet::find($event->wallet_id)?->name : null;
+            $description .= ' (uang masuk '.$this->rupiah((int) $event->amount)
+                .' tanggal '.$event->event_date->format('Y-m-d')
+                .($wallet ? " di dompet {$wallet}" : '')
+                .' dihapus dari kas)';
+        }
+
+        DB::transaction(function () use ($transaction, $event, $before, $description): void {
+            $event?->delete();
+
+            $transaction->update([
+                'sale_value' => null,
+                'sold_at' => null,
+            ]);
+
+            ActivityLog::record(
+                'updated',
+                'transaction',
+                $transaction->code,
+                $transaction->customer->name,
+                $description,
+                ActivityLog::diff($before, ['Nilai jual' => '—', 'Tanggal terjual' => '—']),
+                true,
+            );
+        });
+
+        return back()->with('success', "Penjualan {$transaction->code} dibatalkan, barang kembali belum terjual.");
     }
 
     /**

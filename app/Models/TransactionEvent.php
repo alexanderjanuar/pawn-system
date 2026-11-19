@@ -19,9 +19,10 @@ use Illuminate\Support\Carbon;
  * @property string|null $payment_method
  * @property int|null $wallet_id
  * @property array<int, array{wallet_id: int, amount: int}>|null $wallet_split
+ * @property array{status: string, fee: int, fee_percent: int, denda: int}|null $previous_state
  */
 #[Fillable([
-    'transaction_id', 'type', 'event_date', 'title', 'note', 'by', 'amount', 'payment_method', 'wallet_id', 'wallet_split',
+    'transaction_id', 'type', 'event_date', 'title', 'note', 'by', 'amount', 'payment_method', 'wallet_id', 'wallet_split', 'previous_state',
 ])]
 class TransactionEvent extends Model
 {
@@ -31,6 +32,7 @@ class TransactionEvent extends Model
             'event_date' => 'date',
             'amount' => 'integer',
             'wallet_split' => 'array',
+            'previous_state' => 'array',
         ];
     }
 

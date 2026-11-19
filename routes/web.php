@@ -70,6 +70,7 @@ Route::middleware(['auth', 'active-store'])->group(function () {
 
     // Tebus (redeem & take) + Perpanjang (extend)
     Route::post('transaksi/{transaction}/tebus', [GadaiController::class, 'redeem'])->name('transaksi.redeem');
+    Route::post('transaksi/{transaction}/tebus/batal', [GadaiController::class, 'revertRedeem'])->name('transaksi.redeem.revert');
     Route::post('transaksi/{transaction}/perpanjang', [GadaiController::class, 'extend'])->name('transaksi.extend');
     Route::post('transaksi/{transaction}/perpanjang/batal', [GadaiController::class, 'revertExtend'])->name('transaksi.extend.revert');
     Route::post('transaksi/{transaction}/perpanjang/edit', [GadaiController::class, 'editExtend'])->name('transaksi.extend.edit');
@@ -88,6 +89,7 @@ Route::middleware(['auth', 'active-store'])->group(function () {
     Route::post('transaksi/{transaction}/lelang', [GadaiController::class, 'lelang'])->name('transaksi.lelang');
     Route::post('transaksi/{transaction}/lelang/batal', [GadaiController::class, 'revertLelang'])->name('transaksi.lelang.revert');
     Route::post('transaksi/{transaction}/sale', [GadaiController::class, 'recordSale'])->name('transaksi.sale');
+    Route::post('transaksi/{transaction}/sale/batal', [GadaiController::class, 'revertSale'])->name('transaksi.sale.revert');
     Route::get('transaksi/{transaction}', [TransaksiController::class, 'show'])->name('transaksi.show');
     Route::get('transaksi/{transaction}/nota', [TransaksiController::class, 'nota'])->name('transaksi.nota');
 

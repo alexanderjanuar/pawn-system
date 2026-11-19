@@ -113,12 +113,21 @@ export default function TransaksiShow({
     const [lelangOpen, setLelangOpen] = useState(false);
     const [revertOpen, setRevertOpen] = useState(false);
     const [revertExtendOpen, setRevertExtendOpen] = useState(false);
+    const [revertRedeemOpen, setRevertRedeemOpen] = useState(false);
+    const [revertSaleOpen, setRevertSaleOpen] = useState(false);
     const [editExtendOpen, setEditExtendOpen] = useState(false);
     const [tidakDiambilOpen, setTidakDiambilOpen] = useState(false);
     const [sendNotaOpen, setSendNotaOpen] = useState(false);
 
     const lelang = tx.status === 'LELANG';
     const notRedeemed = tx.status === 'TIDAK_DIAMBIL';
+    const redeemed = tx.status === 'DIAMBIL' && !sold;
+    // History is newest-first, so this is the payment "Batal Tebus" removes.
+    const lastRedemption = history.find((h) => h.kind === 'redeemed');
+    // Only the auction record that carries money is a sale.
+    const lastSale = history.find(
+        (h) => h.kind === 'auctioned' && h.amount != null,
+    );
     // Past due and still live: prompt the owner/clerk to decide the next step.
     const overdue = running && d <= 0;
     const saleNet = tx.saleValue != null ? tx.saleValue - tx.principal : null;
@@ -171,6 +180,24 @@ export default function TransaksiShow({
             {
                 preserveScroll: true,
                 onSuccess: () => setRevertExtendOpen(false),
+            },
+        );
+    const revertRedeem = () =>
+        router.post(
+            `/transaksi/${tx.id}/tebus/batal`,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: () => setRevertRedeemOpen(false),
+            },
+        );
+    const revertSale = () =>
+        router.post(
+            `/transaksi/${tx.id}/sale/batal`,
+            {},
+            {
+                preserveScroll: true,
+                onSuccess: () => setRevertSaleOpen(false),
             },
         );
 
@@ -272,6 +299,26 @@ export default function TransaksiShow({
                                             Batal Perpanjang
                                         </DropdownMenuItem>
                                     )}
+                                    {redeemed && (
+                                        <DropdownMenuItem
+                                            onSelect={() =>
+                                                setRevertRedeemOpen(true)
+                                            }
+                                        >
+                                            <Undo2 />
+                                            Batal Tebus
+                                        </DropdownMenuItem>
+                                    )}
+                                    {sold && (
+                                        <DropdownMenuItem
+                                            onSelect={() =>
+                                                setRevertSaleOpen(true)
+                                            }
+                                        >
+                                            <Undo2 />
+                                            Batal Penjualan
+                                        </DropdownMenuItem>
+                                    )}
                                     {running && !notRedeemed && (
                                         <DropdownMenuItem
                                             onSelect={() =>
@@ -333,6 +380,32 @@ export default function TransaksiShow({
                         description={`Perpanjangan terakhir ${tx.id} dibatalkan. Jatuh tempo kembali ke ${formatDate(addDays(tx.dueDate, -tx.tenorDays))} dan biaya ${formatRupiah(tx.fee)} dihapus dari pendapatan & kas.`}
                         confirmLabel="Batalkan Perpanjangan"
                         onConfirm={revertExtend}
+                        icon={<Undo2 />}
+                    />
+                    <ConfirmDialog
+                        open={revertRedeemOpen}
+                        onOpenChange={setRevertRedeemOpen}
+                        title="Batalkan Tebus?"
+                        description={`Barang ${tx.id} kembali berstatus gadai seperti sebelum ditebus.${
+                            lastRedemption?.amount != null
+                                ? ` Uang tebus ${formatRupiah(lastRedemption.amount)} tanggal ${formatDate(lastRedemption.date)} dihapus dari Kas Harian, saldo dompet, dan pendapatan.`
+                                : ''
+                        }`}
+                        confirmLabel="Batalkan Tebus"
+                        onConfirm={revertRedeem}
+                        icon={<Undo2 />}
+                    />
+                    <ConfirmDialog
+                        open={revertSaleOpen}
+                        onOpenChange={setRevertSaleOpen}
+                        title="Batalkan Penjualan?"
+                        description={`Penjualan barang ${tx.id} dibatalkan dan barang kembali berstatus ${STATUS_META[tx.status].label}, belum terjual.${
+                            lastSale?.amount != null
+                                ? ` Uang jual ${formatRupiah(lastSale.amount)} tanggal ${formatDate(lastSale.date)} dihapus dari Kas Harian, saldo dompet, dan laporan laba.`
+                                : ''
+                        }`}
+                        confirmLabel="Batalkan Penjualan"
+                        onConfirm={revertSale}
                         icon={<Undo2 />}
                     />
                     <ConfirmDialog
@@ -552,6 +625,18 @@ export default function TransaksiShow({
                                                 Catat Penjualan
                                             </Button>
                                         </div>
+                                    )}
+                                    {sold && (
+                                        <Button
+                                            variant="outline"
+                                            size="sm"
+                                            onClick={() =>
+                                                setRevertSaleOpen(true)
+                                            }
+                                        >
+                                            <Undo2 />
+                                            Batal Penjualan
+                                        </Button>
                                     )}
                                 </div>
                                 <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">

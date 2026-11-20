@@ -92,6 +92,14 @@ export default function Nota({ transaction }: { transaction: Transaction }) {
 }
 
 function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
+    const rak = rakLabel(tx.rak);
+    // Barang shares its row with Kunci / Catatan, so both boxes are half width.
+    const sideBySide = hasLock(tx) || Boolean(tx.notes?.trim());
+    const numberBox = cn(
+        'flex items-center gap-2 border-neutral-900 font-bold',
+        half ? 'border px-2 py-1 text-[10px]' : 'border-2 px-3 py-2 text-sm',
+    );
+
     return (
         <>
             {/* Header */}
@@ -135,16 +143,20 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
                         half ? 'gap-1.5' : 'gap-2.5',
                     )}
                 >
-                    <div
-                        className={cn(
-                            'flex items-center gap-2 border-neutral-900 font-bold',
-                            half
-                                ? 'border px-2 py-1 text-[10px]'
-                                : 'border-2 px-3 py-2 text-sm',
+                    {/* Rak sits beside the nota number so the nota gains no height */}
+                    <div className={cn('flex', half ? 'gap-1.5' : 'gap-2.5')}>
+                        <div className={cn(numberBox, 'min-w-0 flex-1')}>
+                            NO NOTA.
+                            <span className="tabular-nums">{tx.id}</span>
+                        </div>
+                        {rak && (
+                            <div className={cn(numberBox, 'max-w-[45%]')}>
+                                RAK.
+                                <span className="min-w-0 break-words">
+                                    {rak}
+                                </span>
+                            </div>
                         )}
-                    >
-                        NO NOTA.
-                        <span className="tabular-nums">{tx.id}</span>
                     </div>
                     <div
                         className={cn(
@@ -207,11 +219,13 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
                     <FieldBox half={half} flush>
                         <Row
                             half={half}
+                            narrow={sideBySide}
                             label="Nama & Tipe Barang"
                             value={tx.device.name}
                         />
                         <Row
                             half={half}
+                            narrow={sideBySide}
                             label="Kelengkapan"
                             value={tx.device.kelengkapan}
                         />
@@ -219,11 +233,13 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
                             <>
                                 <Row
                                     half={half}
+                                    narrow={sideBySide}
                                     label="Plat Nomor"
                                     value={tx.device.platNomor || '-'}
                                 />
                                 <Row
                                     half={half}
+                                    narrow={sideBySide}
                                     label="No. Rangka"
                                     value={tx.device.noRangka || '-'}
                                 />
@@ -231,6 +247,7 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
                         ) : (
                             <Row
                                 half={half}
+                                narrow={sideBySide}
                                 label="Nomor Seri"
                                 value={tx.device.serial}
                             />
@@ -238,15 +255,20 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
                     </FieldBox>
                 </div>
 
-                {(hasLock(tx) || Boolean(tx.notes?.trim())) && (
+                {sideBySide && (
                     <div className="min-w-0 flex-1">
                         <FieldBox half={half} flush>
                             {hasLock(tx) && (
-                                <LockRow half={half} device={tx.device} />
+                                <LockRow
+                                    half={half}
+                                    narrow
+                                    device={tx.device}
+                                />
                             )}
                             {Boolean(tx.notes?.trim()) && (
                                 <Row
                                     half={half}
+                                    narrow
                                     label="Catatan"
                                     value={tx.notes}
                                 />
@@ -327,6 +349,14 @@ function NotaSheet({ tx, half = false }: { tx: Transaction; half?: boolean }) {
     );
 }
 
+/** Rack name after "RAK." without repeating the word: "Rak A" prints as "A". */
+function rakLabel(name?: string | null): string | null {
+    const full = name?.trim() ?? '';
+    const short = full.replace(/^rak\b[\s.:-]*/i, '').trim();
+
+    return full === '' ? null : short || full;
+}
+
 /** Whether the device has an unlock code worth printing. */
 function hasLock(tx: Transaction): boolean {
     return tx.device.lockType !== 'none' && Boolean(tx.device.lockValue);
@@ -342,9 +372,11 @@ const LOCK_SUFFIX: Record<string, string> = {
 function LockRow({
     device,
     half,
+    narrow = false,
 }: {
     device: Transaction['device'];
     half: boolean;
+    narrow?: boolean;
 }) {
     const label = `Kunci Barang · ${LOCK_SUFFIX[device.lockType] ?? ''}`.trim();
     const value = device.lockValue ?? '';
@@ -355,6 +387,7 @@ function LockRow({
         return (
             <Row
                 half={half}
+                narrow={narrow}
                 label={label}
                 value={
                     <span className="flex items-center gap-2">
@@ -376,6 +409,7 @@ function LockRow({
     return (
         <Row
             half={half}
+            narrow={narrow}
             label={label}
             value={<span className="font-mono font-bold">{value}</span>}
         />
@@ -484,10 +518,13 @@ function Row({
     label,
     value,
     half,
+    narrow = false,
 }: {
     label: string;
     value: ReactNode;
     half: boolean;
+    /** Half-width box: a slimmer label column so values don't wrap. */
+    narrow?: boolean;
 }) {
     return (
         <div
@@ -503,7 +540,9 @@ function Row({
                     'shrink-0 font-bold uppercase',
                     half
                         ? 'w-24 text-[8px]'
-                        : 'w-36 text-[11px] sm:w-56 sm:text-sm',
+                        : narrow
+                          ? 'w-28 text-[11px] sm:w-40 sm:text-sm'
+                          : 'w-36 text-[11px] sm:w-56 sm:text-sm',
                 )}
             >
                 {label}

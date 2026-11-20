@@ -89,7 +89,7 @@ class TransaksiController extends Controller
 
     public function nota(Transaction $transaction): Response
     {
-        $transaction->load(['customer', 'events']);
+        $transaction->load(['customer', 'events', 'rak']);
 
         return Inertia::render('transaksi/nota', [
             'transaction' => new TransactionResource($transaction),

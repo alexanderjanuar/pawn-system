@@ -65,9 +65,23 @@
     <table style="margin-top:8px;">
         <tr>
             <td style="width:62%; padding-right:8px; vertical-align:top;">
-                <div class="box" style="padding:6px 10px; font-weight:bold; font-size:12px;">
-                    NO NOTA. <span style="letter-spacing:0.5px;">{{ $n['code'] }}</span>
-                </div>
+                {{-- Rak sits beside the nota number so the nota gains no height --}}
+                <table>
+                    <tr>
+                        <td style="padding:0; vertical-align:top;">
+                            <div class="box" style="padding:6px 10px; font-weight:bold; font-size:12px;">
+                                NO NOTA. <span style="letter-spacing:0.5px;">{{ $n['code'] }}</span>
+                            </div>
+                        </td>
+                        @if ($n['rak'])
+                            <td style="width:30%; padding:0 0 0 6px; vertical-align:top;">
+                                <div class="box" style="padding:6px 10px; font-weight:bold; font-size:12px;">
+                                    RAK. <span style="letter-spacing:0.5px;">{{ $n['rak'] }}</span>
+                                </div>
+                            </td>
+                        @endif
+                    </tr>
+                </table>
                 <div class="box" style="padding:8px 10px; margin-top:6px; text-align:center; font-weight:bold; letter-spacing:1px;">
                     NOTA BARANG GADAI
                 </div>

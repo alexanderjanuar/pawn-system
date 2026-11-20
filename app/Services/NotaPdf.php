@@ -22,7 +22,7 @@ class NotaPdf
     /** Build the nota PDF instance (caller decides to stream or download). */
     public function make(Transaction $transaction): PDF
     {
-        $transaction->loadMissing('customer');
+        $transaction->loadMissing(['customer', 'rak']);
 
         return PdfFacade::loadView('pdf.nota', ['n' => $this->viewData($transaction)])
             ->setPaper('a4', 'portrait');
@@ -53,6 +53,7 @@ class NotaPdf
 
         return [
             'code' => $t->code,
+            'rak' => $this->rakLabel($t->rak?->name),
             'statusUrl' => route('cek-status', ['kode' => $t->code]),
             'customerName' => $t->customer->name,
             'customerPhone' => PhoneNumber::format($t->customer->phone) ?: '-',
@@ -114,6 +115,23 @@ class NotaPdf
             ->filter(fn (int $n) => $n >= 1 && $n <= 9)
             ->values()
             ->all();
+    }
+
+    /**
+     * Rack name as printed after "RAK." on the nota, without repeating the
+     * word: "Rak A" prints as "A", "Lemari 2" stays as is.
+     */
+    private function rakLabel(?string $name): ?string
+    {
+        $name = trim((string) $name);
+
+        if ($name === '') {
+            return null;
+        }
+
+        $short = trim((string) preg_replace('/^rak\b[\s.:-]*/i', '', $name));
+
+        return $short === '' ? $name : $short;
     }
 
     private function idDate(CarbonInterface $date): string
